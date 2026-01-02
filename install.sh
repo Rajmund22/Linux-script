@@ -81,9 +81,9 @@ run() {
 # UI / DESIGN EXTRAS (spinner + üzenetek)
 ############################################
 section() {
-  echo -e "${PURPLE}${BOLD}╔══════════════════════════════════════════════════╗${NC}"
-  echo -e "${PURPLE}${BOLD}║${NC} ${BLUE}$1${NC}"
-  echo -e "${PURPLE}${BOLD}╚══════════════════════════════════════════════════╝${NC}"
+  echo -e "${BLUE}${BOLD}╔══════════════════════════════════════════════════╗${NC}"
+  echo -e "${BLUE}${BOLD}║${NC} ${PURPLE}$1${NC}"
+  echo -e "${BLUE}${BOLD}╚══════════════════════════════════════════════════╝${NC}"
 }
 
 # Pörgő spinner + váltakozó státusz üzenetek (nem lassítja a parancsot)
