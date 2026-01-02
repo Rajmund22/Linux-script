@@ -99,9 +99,26 @@ EOF
 
 section() {
   local title="$1"
-  echo -e "${PURPLE}${BOLD}╔══════════════════════════════════════════════════════════════╗${NC}"
-  printf "${PURPLE}${BOLD}║${NC} ${CYAN}%-60s${NC} ${PURPLE}${BOLD}║${NC}\n" "$title"
-  echo -e "${PURPLE}${BOLD}╚══════════════════════════════════════════════════════════════╝${NC}"
+  local cols=80 box_w inner_w max_title line t
+  cols="$(tput cols 2>/dev/null || echo 80)"
+  # keret szélessége a terminálhoz igazítva (min 40)
+  box_w=$(( cols - 2 ))
+  (( box_w < 40 )) && box_w=40
+
+  inner_w=$(( box_w - 2 ))
+  max_title=$(( inner_w - 2 ))
+
+  # title vágás, ha túl hosszú
+  t="$title"
+  if (( ${#t} > max_title )); then
+    t="${t:0:max_title}"
+  fi
+
+  line="$(printf "%*s" "$inner_w" "" | tr ' ' '═')"
+  echo -e "${PURPLE}${BOLD}╔${line}╗${NC}"
+  printf "${PURPLE}${BOLD}║${NC} ${CYAN}%-*s${NC} ${PURPLE}${BOLD}║${NC}
+" "$max_title" "$t"
+  echo -e "${PURPLE}${BOLD}╚${line}╝${NC}"
 }
 
 hr() { echo -e "${GRAY}────────────────────────────────────────────────────────────${NC}"; }
@@ -188,10 +205,37 @@ start_music() {
 
   log "Zene indítása (YouTube háttér)"
 
-  mpv --no-video --volume="$MUSIC_VOLUME" --loop-playlist=inf --really-quiet "$YOUTUBE_URL" >/dev/null 2>&1 &
+  # Hang legtöbbször a bejelentkezett user PulseAudio-ján szólal meg.
+  # Rootként futtatva (sudo) a hang gyakran "néma", ezért mpv-t a SUDO_USER alatt indítjuk, ha lehet.
+  local music_user="${SUDO_USER:-}"
+  if [[ -n "$music_user" && "$music_user" != "root" ]]; then
+    local uid xdg pulse_env
+    uid="$(id -u "$music_user" 2>/dev/null || echo "")"
+    xdg="/run/user/${uid}"
+    pulse_env=""
+    [[ -S "${xdg}/pulse/native" ]] && pulse_env="PULSE_SERVER=unix:${xdg}/pulse/native"
 
-  MUSIC_PID=$!
-  log "Zene PID: $MUSIC_PID"
+    # ha nincs se Pulse socket, se /dev/snd, valószínű headless / nincs audio device
+    if [[ ! -S "${xdg}/pulse/native" && ! -d /dev/snd ]]; then
+      warn "Nem találok audio eszközt (PulseAudio/socket sincs). VM/headless esetén nem fogsz hangot hallani."
+    fi
+
+    MUSIC_PID="$(runuser -u "$music_user" -- bash -c \
+      "export XDG_RUNTIME_DIR='${xdg}'; ${pulse_env} mpv --no-video --volume='${MUSIC_VOLUME}' --loop-playlist=inf --really-quiet '${YOUTUBE_URL}' >/dev/null 2>&1 & echo \$!")" || true
+  else
+    # ha nem sudo-ból fut, mehet simán
+    if [[ ! -d /dev/snd ]]; then
+      warn "Nem találok /dev/snd audio eszközt. Headless/VM esetén nem fogsz hangot hallani."
+    fi
+    mpv --no-video --volume="$MUSIC_VOLUME" --loop-playlist=inf --really-quiet "$YOUTUBE_URL" >/dev/null 2>&1 &
+    MUSIC_PID=$!
+  fi
+
+  if [[ -n "${MUSIC_PID:-}" ]]; then
+    log "Zene PID: $MUSIC_PID"
+  else
+    warn "Zene indítás nem sikerült (PID üres). Nézd a logot: $LOGFILE"
+  fi
 }
 
 stop_music() {
