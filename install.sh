@@ -149,9 +149,11 @@ is_debian_like() { [[ -f /etc/debian_version ]]; }
 # IGEN/NEM KÉRDÉS
 ############################################
 ask_yn() { # ask_yn "Kérdés?" default(Y/N)
-  local q="$1" def="${2:-Y}" ans=""
+  local q="$1"
+  local def="${2:-Y}"
+  local ans=""
   local hint="Y/n"
-  [[ "$def" == 
+  [[ "${def:-Y}" == "N" ]] && hint="y/N" 
 ############################################
 # ZENE (YouTube háttér)
 ############################################
