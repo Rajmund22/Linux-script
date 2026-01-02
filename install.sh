@@ -256,7 +256,7 @@ run_install INSTALL_UFW        "UFW"       install_ufw
 # HEALTH CHECK + PORT CHECK
 ############################################
 log "HEALTH CHECK"
-for svc in apache2 ssh mosquitto mariadb nodered; do
+for svc in apache2 ssh mosquitto mariadb node-red nodered; do
   if systemctl is-active --quiet "$svc" 2>/dev/null; then
     ok "$svc RUNNING"
   else
