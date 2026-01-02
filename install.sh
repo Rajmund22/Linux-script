@@ -165,32 +165,87 @@ install_ufw() {
 }
  
 install_node_red() {
-  # Node-RED installer néha nem 0-val lép ki -> service állapot a döntő
+  # Node-RED installer néha nem 0-val lép ki -> service/port állapot a döntő
+
   apt_install curl ca-certificates || return 1
- 
+
   log "Node-RED telepítés (non-interactive --confirm-root)"
-  set +e
-  curl -fsSL https://github.com/node-red/linux-installers/releases/latest/download/update-nodejs-and-nodered-deb \
-    | bash -s -- --confirm-root
-  local rc=$?
-  set -e
+  local rc=0
+
+  # NE használjunk set -e-t itt, mert könnyen "kint marad" a scriptre
+  if ! curl -fsSL https://github.com/node-red/linux-installers/releases/latest/download/update-nodejs-and-nodered-deb \
+      | bash -s -- --confirm-root; then
+    rc=$?
+    warn "Node-RED installer nem 0-val lépett ki (rc=$rc) – ettől még lehet jó."
+  fi
   log "Node-RED installer exit code: $rc"
- 
+
   run systemctl daemon-reload || true
-  if systemctl list-unit-files | grep -q '^nodered\.service'; then
-    run systemctl enable --now nodered.service || true
+
+  # Többféle service név lehetséges disztrótól/installer verziótól függően
+  local unit=""
+  for u in nodered.service node-red.service; do
+    if systemctl list-unit-files --type=service 2>/dev/null | awk '{print $1}' | grep -qx "$u"; then
+      unit="$u"
+      break
+    fi
+  done
+
+  if [[ -n "$unit" ]]; then
+    run systemctl enable --now "$unit" || true
+  else
+    # Fallback: ha megvan a node-red parancs, de nincs systemd unit, csinálunk egyet.
+    if command -v node-red >/dev/null 2>&1; then
+      warn "Nem találtam systemd unitot Node-RED-hez -> létrehozok egy saját nodered.service-t."
+
+      id -u nodered >/dev/null 2>&1 || run useradd -r -m -s /usr/sbin/nologin nodered || true
+      run mkdir -p /var/lib/node-red || true
+      run chown -R nodered:nodered /var/lib/node-red || true
+
+      cat > /etc/systemd/system/nodered.service <<'UNIT'
+[Unit]
+Description=Node-RED
+After=network.target
+
+[Service]
+Type=simple
+User=nodered
+Group=nodered
+WorkingDirectory=/var/lib/node-red
+Environment="NODE_RED_OPTIONS=--userDir /var/lib/node-red"
+ExecStart=/usr/bin/env node-red $NODE_RED_OPTIONS
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+
+      run systemctl daemon-reload || true
+      run systemctl enable --now nodered.service || true
+      unit="nodered.service"
+    fi
   fi
- 
-  if systemctl is-active --quiet nodered 2>/dev/null; then
-    return 0
+
+  # Health-check: service active VAGY hallgat a 1880-as porton
+  if [[ -n "$unit" ]]; then
+    if systemctl is-active --quiet "${unit%.service}" 2>/dev/null; then
+      return 0
+    fi
   fi
- 
-  # ha települt a parancs, de nem fut a service, az nálunk hiba
-  if command -v node-red >/dev/null 2>&1; then
-    return 1
+
+  if command -v ss >/dev/null 2>&1; then
+    ss -ltnp 2>/dev/null | grep -E '(:1880)\b' >/dev/null && return 0
+  fi
+
+  # Ha idáig eljutottunk: hiba -> dobjunk logba egy hasznos journal részletet
+  warn "Node-RED nem fut. Journal részlet a logban (ha van systemd unit)."
+  if [[ -n "$unit" ]]; then
+    journalctl -u "$unit" --no-pager -n 60 2>/dev/null | tee -a "$LOGFILE" >/dev/null || true
   fi
   return 1
 }
+
  
 ############################################
 # FUTTATÁS
