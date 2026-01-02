@@ -38,219 +38,45 @@ UFW_ALLOW_NODE_RED=true # 1880
 ############################################
 # ZENE (YouTube) – a kért linkkel
 ############################################
-YOUTUBE_URL="https://www.youtube.com/watch?v=jj0ChLVTpaA&list=RDjj0ChLVTpaA&start_radio=1"
+YOUTUBE_URL=\"https://www.youtube.com/watch?v=jj0ChLVTpaA&list=RDjj0ChLVTpaA&start_radio=1\"
 MUSIC_VOLUME=70
 ENABLE_MUSIC=false
-MUSIC_PID=""
+MUSIC_PID=\"\"
 
 ############################################
-# SZÍNEK / UI
+# ZENE (YouTube háttér)
 ############################################
-RED="\e[31m"; GREEN="\e[32m"; YELLOW="\e[33m"; BLUE="\e[34m"
-PURPLE="\e[35m"; CYAN="\e[36m"; BOLD="\e[1m"; NC="\e[0m"
-GRAY="\e[90m"
-
-############################################
-# ÁLLAPOTOK (összegzéshez)
-############################################
-declare -A STATUS
-declare -a ORDER
-ORDER+=( "Apache" "PHP" "MariaDB" "phpMyAdmin" "Mosquitto" "SSH" "UFW" "Node-RED" )
-
-set_status() { # set_status "Apache" "OK|SKIP|FAIL" "megjegyzés"
-  local k="$1" v="$2" m="${3:-}"
-  STATUS["$k"]="$v|$m"
-}
-
-############################################
-# LOG / FUTTATÁS
-############################################
-mkdir -p "$(dirname "$LOGFILE")" 2>/dev/null || true
-touch "$LOGFILE" 2>/dev/null || true
-
-log() { echo "[$(date '+%F %T')] $*" >> "$LOGFILE"; }
-
-ok()   { echo -e "${GREEN}✔${NC} $*"; log "OK: $*"; }
-warn() { echo -e "${YELLOW}⚠${NC} $*"; log "WARN: $*"; }
-fail() { echo -e "${RED}✖${NC} $*"; log "FAIL: $*"; }
-
-run() {
-  log "RUN: $*"
-  "$@" >> "$LOGFILE" 2>&1
-}
-
-############################################
-# UI ELEMEK
-############################################
-banner() {
-  clear
-  echo -e "${CYAN}${BOLD}"
-  cat << "EOF"
-╔══════════════════════════════════════════════════════════════╗
-║                 SHOW-OFF SERVER INSTALLER                   ║
-║        Apache | Node-RED | MQTT | MariaDB | PHP | UFW        ║
-║              Debian / Ubuntu  •  VirtualBox-safe             ║
-╚══════════════════════════════════════════════════════════════╝
-EOF
-  echo -e "${NC}"
-  echo -e "${BLUE}Logfile:${NC} $LOGFILE"
-  echo
-}
-
-section() {
-  local title="$1"
-  echo -e "${PURPLE}${BOLD}╔══════════════════════════════════════════════════════════════╗${NC}"
-  printf "${PURPLE}${BOLD}║${NC} ${CYAN}%-60s${NC} ${PURPLE}${BOLD}║${NC}\n" "$title"
-  echo -e "${PURPLE}${BOLD}╚══════════════════════════════════════════════════════════════╝${NC}"
-}
-
-hr() { echo -e "${GRAY}────────────────────────────────────────────────────────────${NC}"; }
-
-############################################
-# ROOT CHECK
-############################################
-if [[ -z "${BASH_VERSION:-}" ]]; then
-  echo "Ezt bash-al kell futtatni: bash ./install.sh"
-  exit 1
-fi
-
-if [[ ${EUID:-$(id -u)} -ne 0 ]]; then
-  echo "Root jogosultság szükséges."
-  echo "Futtasd így:"
-  echo "  sudo bash ./install.sh"
-  exit 1
-fi
-
-############################################
-# APT WRAPPER
-############################################
-apt_update_once_done=false
-apt_update_once() {
-  if ! $apt_update_once_done; then
-    section "APT frissítés"
-    run apt-get update -y || return 1
-    apt_update_once_done=true
-  fi
-}
-
-apt_install() {
-  apt_update_once || return 1
-  run apt-get install -y --no-install-recommends "$@" || return 1
-  return 0
-}
-
-############################################
-# OS DETEKT
-############################################
-is_debian_like() { [[ -f /etc/debian_version ]]; }
-
-############################################
-# IGEN/NEM KÉRDÉS
-############################################
-ask_yn() { # ask_yn "Kérdés?" default(Y/N)
-  local q="$1"
-  local def="${2:-Y}"
-  local ans=""
-  local hint="Y/n"
-  [[ "$def" == "N" ]] && hint="y/N"
-  while true; do
-    echo -ne "${CYAN}${q}${NC} (${hint}): "
-    read -r ans || true
-    ans="${ans:-$def}"
-    case "$ans" in
-      Y|y) return 0 ;;
-      N|n) return 1 ;;
-      *) echo "Kérlek Y vagy N." ;;
-    esac
-  done
-}
-
-
-
-############################################
-# ZENE (YouTube stream) – START/STOP (JAVÍTOTT + yt-dlp frissítés fallback)
-############################################
-get_stream_url() {
-  # 1) sima
-  timeout 25 yt-dlp --no-playlist -f bestaudio --get-url "$YOUTUBE_URL" 2>>"$LOGFILE" | head -n 1
-}
-
-get_stream_url_android() {
-  # 2) android kliens (gyakran megoldja az extract hibát)
-  timeout 25 yt-dlp --no-playlist -f bestaudio --get-url \
-    --extractor-args "youtube:player_client=android" \
-    "$YOUTUBE_URL" 2>>"$LOGFILE" | head -n 1
-}
-
 start_music() {
   $ENABLE_MUSIC || return 0
 
-  section "Zene"
-
-  # kellékek
-  if ! command -v yt-dlp >/dev/null 2>&1; then
-    info "Zene: yt-dlp telepítése..."
-    apt_install yt-dlp || { warn "Zene: yt-dlp telepítése nem sikerült."; return 0; }
-  fi
-  if ! command -v mpv >/dev/null 2>&1; then
-    info "Zene: mpv telepítése..."
-    apt_install mpv || { warn "Zene: mpv telepítése nem sikerült."; return 0; }
+  # függőségek (csak ha hiányzik)
+  if ! command -v mpv >/dev/null 2>&1 || ! command -v yt-dlp >/dev/null 2>&1; then
+    section "Zene függőségek"
+    apt_install mpv yt-dlp || { warn "mpv/yt-dlp telepítés sikertelen, zene kihagyva."; return 0; }
   fi
 
-  # stream URL kinyerése – több lépéses fallback
-  local stream_url=""
-  stream_url="$(get_stream_url || true)"
-  if [[ -z "$stream_url" ]]; then
-    stream_url="$(get_stream_url_android || true)"
-  fi
-
-  # ha még mindig üres, frissítjük yt-dlp-t pip-pel és újrapróbáljuk
-  if [[ -z "$stream_url" ]]; then
-    warn "Zene: yt-dlp nem tudta kinyerni a stream URL-t. Megpróbálom frissíteni yt-dlp-t..."
-    apt_install python3-pip python3-venv >/dev/null 2>&1 || true
-    # pip3 upgrade (rootként)
-    timeout 120 pip3 install -U yt-dlp >>"$LOGFILE" 2>&1 || true
-
-    # újra próbák
-    stream_url="$(get_stream_url || true)"
-    if [[ -z "$stream_url" ]]; then
-      stream_url="$(get_stream_url_android || true)"
-    fi
-  fi
-
-  if [[ -z "$stream_url" ]]; then
-    warn "Zene: nem sikerült kinyerni a stream URL-t a YouTube linkből."
+  # ha már fut, ne indítsuk újra
+  if [[ -n "${MUSIC_PID:-}" ]] && kill -0 "$MUSIC_PID" 2>/dev/null; then
     return 0
   fi
 
-  # lejátszás indítása háttérben
-  mpv --no-video --quiet --volume="$MUSIC_VOLUME" "$stream_url" >>"$LOGFILE" 2>&1 &
-  MUSIC_PID="$!"
+  log "Zene indítása (YouTube háttér)"
 
-  if [[ -n "${MUSIC_PID:-}" ]] && kill -0 "$MUSIC_PID" 2>/dev/null; then
-    ok "Megy a zene."
-  else
-    warn "Zene: nem indult el a lejátszás."
-    MUSIC_PID=""
-  fi
+  # A legegyszerűbb és legkevésbé 'invazív' megoldás: mpv kapja a YouTube URL-t,
+  # a yt-dlp-t pedig háttérben használja a stream feloldásához.
+  mpv --no-video --volume="$MUSIC_VOLUME" --loop-playlist=inf --really-quiet "$YOUTUBE_URL" >/dev/null 2>&1 &
+  MUSIC_PID=$!
+  log "Zene PID: $MUSIC_PID"
 }
 
 stop_music() {
-  if [[ -n "${MUSIC_PID:-}" ]]; then
-    if kill -0 "$MUSIC_PID" 2>/dev/null; then
-      kill "$MUSIC_PID" >/dev/null 2>&1 || true
-      sleep 0.3 || true
-      kill -9 "$MUSIC_PID" >/dev/null 2>&1 || true
-    fi
+  if [[ -n "${MUSIC_PID:-}" ]] && kill -0 "$MUSIC_PID" 2>/dev/null; then
+    log "Zene leállítása (PID: $MUSIC_PID)"
+    kill "$MUSIC_PID" 2>/dev/null || true
+    wait "$MUSIC_PID" 2>/dev/null || true
     MUSIC_PID=""
-    ok "Zene leállítva."
   fi
 }
-
-cleanup() {
-  stop_music
-}
-trap cleanup EXIT INT TERM
 
 ############################################
 # FELADAT FUTTATÓ
@@ -351,7 +177,15 @@ install_mariadb() {
     apt_install mariadb-server || { set_status "MariaDB" "FAIL" "apt install"; return 1; }
   fi
 
-  run systemctl enable --now mariadb || true
+    run systemctl enable --now mariadb || true
+  # Néhány csomag telepítése/konfigurálása közben a szolgáltatás leállhat.
+  # Próbáljuk meg stabilan életre kelteni.
+  sleep 1 || true
+  if ! is_service_active mariadb; then
+    warn "MariaDB nem aktív az enable --now után, újraindítom..."
+    run systemctl restart mariadb || true
+    sleep 1 || true
+  fi
 
   if [[ -n "$MARIADB_ROOT_PASSWORD" ]]; then
     run mysql -e "ALTER USER 'root'@'localhost' IDENTIFIED BY '${MARIADB_ROOT_PASSWORD}'; FLUSH PRIVILEGES;" || true
@@ -657,7 +491,6 @@ main() {
   ok "Telepítés indul."
   hr
 
-  start_music
 
   local all_ok=true
 
@@ -669,6 +502,8 @@ main() {
   install_ssh        || all_ok=false
   install_node_red   || all_ok=false
   install_ufw        || all_ok=false
+
+  start_music
 
   print_summary
 
