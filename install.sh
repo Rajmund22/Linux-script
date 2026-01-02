@@ -351,8 +351,47 @@ install_mariadb() {
     apt_install mariadb-server || { set_status "MariaDB" "FAIL" "apt install"; return 1; }
   fi
 
+  # Datadir jogosultságok rendbetétele (gyakori hiba script futás után)
+  if [[ -d /var/lib/mysql ]]; then
+    run chown -R mysql:mysql /var/lib/mysql || true
+    run chmod 750 /var/lib/mysql || true
+  fi
+
+  # Ha a rendszeradatbázis hiányzik, inicializáljuk (ritka, de előfordul)
+  if [[ ! -d /var/lib/mysql/mysql ]]; then
+    warn "MariaDB datadir nem tűnik inicializáltnak (/var/lib/mysql/mysql hiányzik). Inicializálás..."
+    if command -v mariadb-install-db >/dev/null 2>&1; then
+      run mariadb-install-db --user=mysql --datadir=/var/lib/mysql || true
+    elif command -v mysql_install_db >/dev/null 2>&1; then
+      run mysql_install_db --user=mysql --datadir=/var/lib/mysql || true
+    fi
+    run chown -R mysql:mysql /var/lib/mysql || true
+  fi
+
   run systemctl enable --now mariadb || true
 
+  # InnoDB redo log hiány (ib_logfile0/1) automatikus javítása
+  if ! is_service_active mariadb; then
+    local j
+    j="$(journalctl -u mariadb -b --no-pager 2>/dev/null | tail -n 200 || true)"
+    if echo "$j" | grep -qiE "ib_logfile0 was not found|Plugin 'InnoDB' registration|Unknown/unsupported storage engine: InnoDB"; then
+      warn "MariaDB: InnoDB log hiba (ib_logfile0/1). Automatikus javítás indul..."
+      run systemctl stop mariadb || true
+
+      # biztonsági mentés (best effort)
+      local ts
+      ts="$(date +%F_%H-%M-%S)"
+      run tar -czf "/root/mysql_backup_${ts}.tgz" /var/lib/mysql || true
+
+      # redo logok újragenerálása
+      run rm -f /var/lib/mysql/ib_logfile* || true
+      run chown -R mysql:mysql /var/lib/mysql || true
+
+      run systemctl start mariadb || true
+    fi
+  fi
+
+  # Root jelszó beállítás (ha kérted)
   if [[ -n "$MARIADB_ROOT_PASSWORD" ]]; then
     run mysql -e "ALTER USER 'root'@'localhost' IDENTIFIED BY '${MARIADB_ROOT_PASSWORD}'; FLUSH PRIVILEGES;" || true
     ok "MariaDB root jelszó megkísérelve beállítani."
@@ -364,7 +403,7 @@ install_mariadb() {
     return 0
   else
     set_status "MariaDB" "FAIL" "service nem aktív"
-    warn "MariaDB nem aktív."
+    warn "MariaDB nem aktív. Nézd meg: systemctl status mariadb && journalctl -u mariadb -b"
     return 1
   fi
 }
