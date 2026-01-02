@@ -35,6 +35,15 @@ UFW_ALLOW_HTTPS=true
 UFW_ALLOW_MQTT=true     # 1883
 UFW_ALLOW_NODE_RED=true # 1880
 
+
+############################################
+# ZENE (YouTube)
+############################################
+YOUTUBE_URL="https://www.youtube.com/watch?v=jj0ChLVTpaA&list=RDjj0ChLVTpaA&start_radio=1"
+MUSIC_VOLUME=70
+ENABLE_MUSIC=false
+MUSIC_PID=""
+
 ############################################
 # SZÍNEK / UI
 ############################################
@@ -142,7 +151,50 @@ is_debian_like() { [[ -f /etc/debian_version ]]; }
 ask_yn() { # ask_yn "Kérdés?" default(Y/N)
   local q="$1" def="${2:-Y}" ans=""
   local hint="Y/n"
-  [[ "$def" == "N" ]] && hint="y/N"
+  [[ "$def" == 
+############################################
+# ZENE (YouTube háttér)
+############################################
+start_music() {
+  if ! $ENABLE_MUSIC; then
+    return 0
+  fi
+
+  # függőségek (csak ha kell)
+  if ! command -v mpv >/dev/null 2>&1 || ! command -v yt-dlp >/dev/null 2>&1; then
+    section "Zene függőségek (mpv + yt-dlp)"
+    apt_install mpv yt-dlp || { warn "mpv/yt-dlp telepítés sikertelen – zene kihagyva."; return 1; }
+  fi
+
+  # ha már fut, ne indítsuk újra
+  if [[ -n "$MUSIC_PID" ]] && kill -0 "$MUSIC_PID" 2>/dev/null; then
+    return 0
+  fi
+
+  log "Zene indítása (YouTube háttér)"
+
+  mpv \
+    --no-video \
+    --volume="$MUSIC_VOLUME" \
+    --loop-playlist=inf \
+    --really-quiet \
+    "$YOUTUBE_URL" \
+    >/dev/null 2>&1 &
+
+  MUSIC_PID=$!
+  log "Zene PID: $MUSIC_PID"
+}
+
+stop_music() {
+  if [[ -n "$MUSIC_PID" ]] && kill -0 "$MUSIC_PID" 2>/dev/null; then
+    log "Zene leállítása (PID: $MUSIC_PID)"
+    kill "$MUSIC_PID" 2>/dev/null || true
+    wait "$MUSIC_PID" 2>/dev/null || true
+    MUSIC_PID=""
+  fi
+}
+
+"N" ]] && hint="y/N"
   while true; do
     echo -ne "${CYAN}${q}${NC} (${hint}): "
     read -r ans || true
@@ -535,6 +587,7 @@ configure_toggles() {
   ask_yn "SSH telepítése?" "Y" && ENABLE_SSH=true || ENABLE_SSH=false
   ask_yn "UFW tűzfal konfigurálása?" "Y" && ENABLE_UFW=true || ENABLE_UFW=false
   ask_yn "Node-RED telepítése?" "Y" && ENABLE_NODE_RED=true || ENABLE_NODE_RED=false
+  ask_yn "Menjen zene induláskor? (YouTube)" "N" && ENABLE_MUSIC=true || ENABLE_MUSIC=false
   echo
 }
 
@@ -543,6 +596,7 @@ configure_toggles() {
 ############################################
 main() {
   banner
+  trap stop_music EXIT INT TERM
 
   if ! is_debian_like; then
     warn "Ez a script Debian/Ubuntu alapra készült. Lehet, hogy nem fog működni."
@@ -551,6 +605,8 @@ main() {
   if ask_yn "Szeretnéd kiválasztani, mit telepítsünk (interaktív mód)?" "Y"; then
     configure_toggles
   fi
+
+  start_music || true
 
   hr
   ok "Telepítés indul."
