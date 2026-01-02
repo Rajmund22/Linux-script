@@ -52,6 +52,9 @@ GREEN="\e[32m"
 YELLOW="\e[33m"
 BLUE="\e[34m"
 PURPLE="\e[35m"
+CYAN="\e[36m"
+GRAY="\e[90m"
+BOLD="\e[1m"
 NC="\e[0m"
  
 ############################################
@@ -71,6 +74,61 @@ run() {
     return 0
   fi
   "$@"
+}
+
+
+############################################
+# UI / DESIGN EXTRAS (spinner + üzenetek)
+############################################
+section() {
+  echo -e "${PURPLE}${BOLD}╔══════════════════════════════════════════════════╗${NC}"
+  echo -e "${PURPLE}${BOLD}║${NC} ${BLUE}$1${NC}"
+  echo -e "${PURPLE}${BOLD}╚══════════════════════════════════════════════════╝${NC}"
+}
+
+# Pörgő spinner + váltakozó státusz üzenetek (nem lassítja a parancsot)
+ui_wait() {
+  local pid="$1"
+  shift
+  local spin='|/-\'
+  local i=0
+  local msgs=("$@")
+  local m=0
+  local t=0
+
+  if [[ ${#msgs[@]} -eq 0 ]]; then
+    msgs=("Dolgozom..." "Letöltés folyamatban..." "Konfigurálás..." "Még egy pillanat...")
+  fi
+
+  while kill -0 "$pid" 2>/dev/null; do
+    i=$(( (i+1) % 4 ))
+    t=$((t+1))
+    if (( t % 12 == 0 )); then
+      m=$(( (m+1) % ${#msgs[@]} ))
+    fi
+    printf "\r${CYAN}[%c]${NC} ${YELLOW}%s${NC}  " "${spin:$i:1}" "${msgs[$m]}"
+    sleep 0.1
+  done
+  printf "\r${GREEN}[✔]${NC} Kész.                                             \n"
+}
+
+# Egy parancs futtatása animációval + loggal
+run_task() {
+  local label="$1"; shift
+  log "TASK: ${label} -> $*"
+
+  if [[ "$DRY_RUN" == "true" ]]; then
+    warn "[DRY-RUN] ${label}: $*"
+    return 0
+  fi
+
+  "$@" &
+  local pid=$!
+
+  ui_wait "$pid"     "${label}"     "Letöltés / telepítés..."     "Csomagok kibontása..."     "Konfigurálás..."     "Ellenőrzés..."
+
+  wait "$pid"
+  return $?
 }
  
 ############################################
@@ -98,12 +156,12 @@ set_result() { RESULTS["$1"]="$2"; }
 ############################################
 apt_update() {
   log "APT csomaglista frissítése"
-  run apt-get update -y
+  run_task "APT update" apt-get update -y
 }
  
 apt_install() {
   log "Csomag telepítés: $*"
-  run apt-get install -y "$@"
+  run_task "APT install: $*" apt-get install -y "$@"
 }
  
 ############################################
@@ -165,21 +223,21 @@ install_ufw() {
 }
  
 install_node_red() {
+  section "Node-RED"
+  # Biztos megoldás: Node-RED npm-ből + saját systemd unit (egységes név: nodered.service)
   apt_install curl ca-certificates nodejs npm || return 1
 
-  # Ha a node-red nincs fent, felrakjuk npm-mel
   if ! command -v node-red >/dev/null 2>&1; then
     log "Node-RED telepítése npm-mel"
-    # --unsafe-perm kell rootos telepítéshez sok esetben
-    run npm install -g --unsafe-perm node-red || return 1
+    run_task "Node-RED (npm)" npm install -g --unsafe-perm --no-audit --no-fund node-red || return 1
+  else
+    ok "Node-RED parancs már elérhető"
   fi
 
-  # user + mappa
   id -u nodered >/dev/null 2>&1 || run useradd -r -m -s /usr/sbin/nologin nodered || true
   run mkdir -p /var/lib/node-red || true
   run chown -R nodered:nodered /var/lib/node-red || true
 
-  # Systemd unit LÉTREHOZÁSA (mindig)
   cat > /etc/systemd/system/nodered.service <<'UNIT'
 [Unit]
 Description=Node-RED
@@ -202,12 +260,11 @@ UNIT
   run systemctl daemon-reload || true
   run systemctl enable --now nodered.service || true
 
-  # ellenőrzés
-  if systemctl is-active --quiet nodered; then
+  if systemctl is-active --quiet nodered 2>/dev/null; then
     return 0
   fi
 
-  warn "Node-RED nem indult el, journal:"
+  warn "Node-RED nem indult el, journal részlet:"
   journalctl -u nodered.service --no-pager -n 80 2>/dev/null | tee -a "$LOGFILE" >/dev/null || true
   return 1
 }
@@ -292,18 +349,22 @@ done
 if [[ "$any_fail" -eq 0 ]]; then
   echo -e "${GREEN}KÉSZ – minden lépés rendben lefutott.${NC}"
   log "Telepítés befejezve: SIKERES"
- 
   echo
-  echo -e "${PURPLE}"
-  cat << "EOF"
-██╗  ██╗ █████╗      ██╗██████╗  █████╗     ██╗     ██╗██╗      █████╗ ██╗  ██╗
-██║  ██║██╔══██╗     ██║██╔══██╗██╔══██╗    ██║     ██║██║     ██╔══██╗██║ ██╔╝
-███████║███████║     ██║██████╔╝███████║    ██║     ██║██║     ███████║█████╔╝ 
-██╔══██║██╔══██║██   ██║██╔══██╗██╔══██║    ██║     ██║██║     ██╔══██║██╔═██╗ 
-██║  ██║██║  ██║╚█████╔╝██║  ██║██║  ██║    ███████╗██║███████╗██║  ██║██║  ██╗
-╚═╝  ╚═╝╚═╝  ╚═╝ ╚════╝ ╚═╝  ╚═╝╚═╝  ╚═╝    ╚══════╝╚═╝╚══════╝╚═╝  ╚═╝╚═╝  ╚═╝
-EOF
-  echo -e "${NC}"
+
+  section "DEPLOYMENT COMPLETE"
+  echo -e "${CYAN}Szolgáltatások:${NC} Apache | SSH | MQTT | Node-RED | MariaDB | PHP | UFW"
+  echo
+
+  final_msgs=(
+    "All systems operational."
+    "Provisioning finished successfully."
+    "Ready for demo / evaluation."
+  )
+  for msg in "${final_msgs[@]}"; do
+    echo -e "${PURPLE}»${NC} ${msg}"
+    sleep 0.5
+  done
+
   exit 0
 else
   echo -e "${YELLOW}KÉSZ – volt sikertelen lépés. Nézd a logot: $LOGFILE${NC}"
