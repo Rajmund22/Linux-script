@@ -10,11 +10,15 @@ export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 ############################################
 LOGFILE="/var/log/showoff_installer.log"
 
-# ZENE (YouTube) – a kért linkkel
-YOUTUBE_URL="https://www.youtube.com/watch?v=jj0ChLVTpaA&list=RDjj0ChLVTpaA&start_radio=1"
-MUSIC_VOLUME=70
-ENABLE_MUSIC=false
-MUSIC_PID=""
+# Komponensek (alapért. bekapcsolva)
+ENABLE_APACHE=true
+ENABLE_PHP=true
+ENABLE_MARIADB=true
+ENABLE_PHPMYADMIN=true
+ENABLE_MOSQUITTO=true
+ENABLE_SSH=true
+ENABLE_UFW=true
+ENABLE_NODE_RED=true
 
 # Node-RED
 NODE_RED_PORT=1880
@@ -31,15 +35,20 @@ UFW_ALLOW_HTTPS=true
 UFW_ALLOW_MQTT=true     # 1883
 UFW_ALLOW_NODE_RED=true # 1880
 
-# APT update kérdés (runtime állítja)
-DO_APT_UPDATE=true
+############################################
+# ZENE (YouTube) – a kért linkkel
+############################################
+YOUTUBE_URL="https://www.youtube.com/watch?v=jj0ChLVTpaA&list=RDjj0ChLVTpaA&start_radio=1"
+MUSIC_VOLUME=70
+ENABLE_MUSIC=false
+MUSIC_PID=""
 
 ############################################
 # SZÍNEK / UI
 ############################################
 RED="\e[31m"; GREEN="\e[32m"; YELLOW="\e[33m"; BLUE="\e[34m"
 PURPLE="\e[35m"; CYAN="\e[36m"; BOLD="\e[1m"; NC="\e[0m"
-GRAY="\e[90m"; WHITE="\e[97m"
+GRAY="\e[90m"
 
 ############################################
 # ÁLLAPOTOK (összegzéshez)
@@ -48,17 +57,7 @@ declare -A STATUS
 declare -a ORDER
 ORDER+=( "Apache" "PHP" "MariaDB" "phpMyAdmin" "Mosquitto" "SSH" "UFW" "Node-RED" )
 
-# Akciók (default: install – így a működés alapból nem változik)
-ACTION_APACHE="install"
-ACTION_PHP="install"
-ACTION_MARIADB="install"
-ACTION_PHPMYADMIN="install"
-ACTION_MOSQUITTO="install"
-ACTION_SSH="install"
-ACTION_UFW="install"
-ACTION_NODE_RED="install"
-
-set_status() { # set_status "Apache" "OK|SKIP|FAIL|REM" "megjegyzés"
+set_status() { # set_status "Apache" "OK|SKIP|FAIL" "megjegyzés"
   local k="$1" v="$2" m="${3:-}"
   STATUS["$k"]="$v|$m"
 }
@@ -74,7 +73,6 @@ log() { echo "[$(date '+%F %T')] $*" >> "$LOGFILE"; }
 ok()   { echo -e "${GREEN}✔${NC} $*"; log "OK: $*"; }
 warn() { echo -e "${YELLOW}⚠${NC} $*"; log "WARN: $*"; }
 fail() { echo -e "${RED}✖${NC} $*"; log "FAIL: $*"; }
-info() { echo -e "${CYAN}i${NC} $*"; log "INFO: $*"; }
 
 run() {
   log "RUN: $*"
@@ -102,7 +100,7 @@ EOF
 section() {
   local title="$1"
   echo -e "${PURPLE}${BOLD}╔══════════════════════════════════════════════════════════════╗${NC}"
-  printf "${PURPLE}${BOLD}║${NC} ${WHITE}%-60s${NC} ${PURPLE}${BOLD}║${NC}\n" "$title"
+  printf "${PURPLE}${BOLD}║${NC} ${CYAN}%-60s${NC} ${PURPLE}${BOLD}║${NC}\n" "$title"
   echo -e "${PURPLE}${BOLD}╚══════════════════════════════════════════════════════════════╝${NC}"
 }
 
@@ -124,74 +122,15 @@ if [[ ${EUID:-$(id -u)} -ne 0 ]]; then
 fi
 
 ############################################
-# INPUT FIX (CTRL+C bug megszüntetése)
-# - promptok stderr-re mennek (nem nyeli el a $(...) )
-# - ha nincs TTY (pl. pipe/cron), automatikusan defaultol
-############################################
-has_tty() {
-  [[ -t 0 ]] || [[ -t 1 ]] || [[ -t 2 ]]
-}
-
-read_line_or_default() { # $1=default -> echo answer
-  local def="$1" ans=""
-  if [[ -t 0 ]]; then
-    IFS= read -r ans || ans=""
-    ans="${ans:-$def}"
-    echo "$ans"
-    return 0
-  fi
-  # nincs interaktív stdin -> default (nem blokkolunk)
-  echo "$def"
-}
-
-ask_yn() { # ask_yn "Kérdés?" default(Y/N)
-  local q="$1" def="${2:-Y}" ans=""
-  local hint="Y/n"
-  [[ "$def" == "N" ]] && hint="y/N"
-  while true; do
-    printf "%b%s%b (%s): " "$CYAN" "$q" "$NC" "$hint" >&2
-    ans="$(read_line_or_default "$def")"
-    case "$ans" in
-      Y|y) return 0 ;;
-      N|n) return 1 ;;
-      *) printf "Kérlek Y vagy N.\n" >&2 ;;
-    esac
-  done
-}
-
-ask_action() { # ask_action "Apache" default(I/R/S) -> stdout: install/remove/skip
-  local name="$1"
-  local def="${2:-I}"
-  local ans=""
-  local hint="I=Telepít / R=Töröl / S=Kihagy"
-  while true; do
-    printf "%b%s:%b %s (alap: %s): " "$CYAN" "$name" "$NC" "$hint" "$def" >&2
-    ans="$(read_line_or_default "$def")"
-    case "$ans" in
-      I|i) echo "install"; return 0 ;;
-      R|r) echo "remove";  return 0 ;;
-      S|s) echo "skip";    return 0 ;;
-      *)   printf "Kérlek I / R / S.\n" >&2 ;;
-    esac
-  done
-}
-
-############################################
 # APT WRAPPER
 ############################################
 apt_update_once_done=false
 apt_update_once() {
-  if $apt_update_once_done; then
-    return 0
-  fi
-  if ! $DO_APT_UPDATE; then
-    info "APT update kihagyva (felhasználói döntés)."
+  if ! $apt_update_once_done; then
+    section "APT frissítés"
+    run apt-get update -y || return 1
     apt_update_once_done=true
-    return 0
   fi
-  section "APT frissítés"
-  run apt-get update -y || return 1
-  apt_update_once_done=true
 }
 
 apt_install() {
@@ -200,12 +139,33 @@ apt_install() {
   return 0
 }
 
-apt_purge() {
-  apt_update_once || true
-  run apt-get purge -y "$@" || return 1
-  run apt-get autoremove -y || true
-  return 0
+############################################
+# OS DETEKT
+############################################
+is_debian_like() { [[ -f /etc/debian_version ]]; }
+
+############################################
+# IGEN/NEM KÉRDÉS
+############################################
+ask_yn() { # ask_yn "Kérdés?" default(Y/N)
+  local q="$1"
+  local def="${2:-Y}"
+  local ans=""
+  local hint="Y/n"
+  [[ "$def" == "N" ]] && hint="y/N"
+  while true; do
+    echo -ne "${CYAN}${q}${NC} (${hint}): "
+    read -r ans || true
+    ans="${ans:-$def}"
+    case "$ans" in
+      Y|y) return 0 ;;
+      N|n) return 1 ;;
+      *) echo "Kérlek Y vagy N." ;;
+    esac
+  done
 }
+
+
 
 ############################################
 # ZENE (YouTube stream) – START/STOP (JAVÍTOTT + yt-dlp frissítés fallback)
@@ -308,7 +268,7 @@ run_task() { # run_task "név" command...
 }
 
 ############################################
-# KÖZÖS: service check
+# KÖZÖS: ports / gyors státusz
 ############################################
 is_service_active() {
   local svc="$1"
@@ -316,122 +276,16 @@ is_service_active() {
 }
 
 ############################################
-# TÖRLŐK (REMOVE)
-############################################
-remove_apache() {
-  section "Apache – törlés"
-  run systemctl disable --now apache2 >/dev/null 2>&1 || true
-  if dpkg -s apache2 >/dev/null 2>&1; then
-    apt_purge apache2 apache2-bin apache2-data apache2-utils || return 1
-  fi
-  set_status "Apache" "REM" "eltávolítva"
-  ok "Apache eltávolítva."
-}
-
-remove_php() {
-  section "PHP – törlés"
-  local pkgs=(php php-cli php-fpm php-mysql php-xml php-mbstring php-curl php-zip libapache2-mod-php)
-  apt_purge "${pkgs[@]}" >/dev/null 2>&1 || true
-  run rm -f /var/www/html/info.php >/dev/null 2>&1 || true
-  set_status "PHP" "REM" "eltávolítva"
-  ok "PHP eltávolítva."
-}
-
-remove_mariadb() {
-  section "MariaDB – törlés"
-  run systemctl disable --now mariadb >/dev/null 2>&1 || true
-  if dpkg -s mariadb-server >/dev/null 2>&1; then
-    apt_purge mariadb-server mariadb-client >/dev/null 2>&1 || true
-  fi
-  warn "MariaDB adatkönyvtárat nem töröltem automatikusan (/var/lib/mysql)."
-  set_status "MariaDB" "REM" "eltávolítva"
-  ok "MariaDB eltávolítva."
-}
-
-remove_phpmyadmin() {
-  section "phpMyAdmin – törlés"
-  if dpkg -s phpmyadmin >/dev/null 2>&1; then
-    apt_purge phpmyadmin >/dev/null 2>&1 || true
-  fi
-  set_status "phpMyAdmin" "REM" "eltávolítva"
-  ok "phpMyAdmin eltávolítva."
-}
-
-remove_mosquitto() {
-  section "Mosquitto – törlés"
-  run systemctl disable --now mosquitto >/dev/null 2>&1 || true
-  if dpkg -s mosquitto >/dev/null 2>&1; then
-    apt_purge mosquitto mosquitto-clients >/dev/null 2>&1 || true
-  fi
-  set_status "Mosquitto" "REM" "eltávolítva"
-  ok "Mosquitto eltávolítva."
-}
-
-remove_ssh() {
-  section "SSH – törlés"
-  warn "FIGYELEM: ha távolról vagy belépve, az SSH törlése kizárhat."
-  if ! ask_yn "Biztosan törlöd az OpenSSH Servert?" "N"; then
-    set_status "SSH" "SKIP" "törlés megszakítva"
-    warn "SSH törlés megszakítva."
-    return 0
-  fi
-  run systemctl disable --now ssh >/dev/null 2>&1 || true
-  run systemctl disable --now sshd >/dev/null 2>&1 || true
-  if dpkg -s openssh-server >/dev/null 2>&1; then
-    apt_purge openssh-server >/dev/null 2>&1 || true
-  fi
-  set_status "SSH" "REM" "eltávolítva"
-  ok "SSH eltávolítva."
-}
-
-remove_ufw() {
-  section "UFW – törlés"
-  run ufw --force disable >/dev/null 2>&1 || true
-  run systemctl disable --now ufw >/dev/null 2>&1 || true
-  if dpkg -s ufw >/dev/null 2>&1; then
-    apt_purge ufw >/dev/null 2>&1 || true
-  fi
-  set_status "UFW" "REM" "eltávolítva"
-  ok "UFW eltávolítva."
-}
-
-remove_node_red() {
-  section "Node-RED – törlés"
-  run systemctl disable --now nodered.service >/dev/null 2>&1 || true
-  run rm -f /etc/systemd/system/nodered.service >/dev/null 2>&1 || true
-  run systemctl daemon-reload >/dev/null 2>&1 || true
-
-  if command -v npm >/dev/null 2>&1; then
-    run_task "Node-RED (npm remove -g)" npm remove -g node-red || true
-  fi
-
-  if [[ -d "$NODE_RED_USERDIR" ]]; then
-    if ask_yn "Töröljem a Node-RED userDir-t is? (${NODE_RED_USERDIR})" "N"; then
-      run rm -rf "$NODE_RED_USERDIR" >/dev/null 2>&1 || true
-      ok "Node-RED userDir törölve."
-    else
-      info "Node-RED userDir megmaradt: ${NODE_RED_USERDIR}"
-    fi
-  fi
-
-  if id -u nodered >/dev/null 2>&1; then
-    if ask_yn "Töröljem a 'nodered' felhasználót is?" "N"; then
-      run userdel -r nodered >/dev/null 2>&1 || true
-      ok "nodered user törölve."
-    else
-      info "nodered user megmaradt."
-    fi
-  fi
-
-  set_status "Node-RED" "REM" "eltávolítva"
-  ok "Node-RED eltávolítva."
-}
-
-############################################
-# TELEPÍTŐK (INSTALL)
+# TELEPÍTŐK
 ############################################
 install_apache() {
-  section "Apache – telepítés"
+  section "Apache"
+  if ! $ENABLE_APACHE; then
+    set_status "Apache" "SKIP" "kikapcsolva"
+    warn "Apache kihagyva (kikapcsolva)."
+    return 0
+  fi
+
   if dpkg -s apache2 >/dev/null 2>&1; then
     ok "Apache már telepítve."
   else
@@ -451,7 +305,13 @@ install_apache() {
 }
 
 install_php() {
-  section "PHP – telepítés"
+  section "PHP"
+  if ! $ENABLE_PHP; then
+    set_status "PHP" "SKIP" "kikapcsolva"
+    warn "PHP kihagyva (kikapcsolva)."
+    return 0
+  fi
+
   local pkgs=(php php-cli php-fpm php-mysql php-xml php-mbstring php-curl php-zip libapache2-mod-php)
   local any_missing=false
   for p in "${pkgs[@]}"; do
@@ -472,74 +332,51 @@ EOF
     ok "info.php létrehozva: /var/www/html/info.php"
   fi
 
-  run systemctl reload apache2 >/dev/null 2>&1 || true
+  run systemctl reload apache2 || true
   set_status "PHP" "OK" "telepítve"
   return 0
 }
 
 install_mariadb() {
-  section "MariaDB – telepítés"
+  section "MariaDB"
+  if ! $ENABLE_MARIADB; then
+    set_status "MariaDB" "SKIP" "kikapcsolva"
+    warn "MariaDB kihagyva (kikapcsolva)."
+    return 0
+  fi
 
-  if ! dpkg -s mariadb-server >/dev/null 2>&1; then
-    apt_install mariadb-server || {
-      set_status "MariaDB" "FAIL" "apt install"
-      return 1
-    }
-  else
+  if dpkg -s mariadb-server >/dev/null 2>&1; then
     ok "MariaDB már telepítve."
+  else
+    apt_install mariadb-server || { set_status "MariaDB" "FAIL" "apt install"; return 1; }
   fi
 
-  # --- KRITIKUS JAVÍTÁS BLOKK ---
+  run systemctl enable --now mariadb || true
 
-  # 1) runtime dir
-  run mkdir -p /run/mysqld || true
-  run chown mysql:mysql /run/mysqld || true
-  run chmod 755 /run/mysqld || true
-
-  # 2) adatkönyvtár jogosultság
-  if [[ -d /var/lib/mysql ]]; then
-    run chown -R mysql:mysql /var/lib/mysql || true
-    run chmod 750 /var/lib/mysql || true
+  if [[ -n "$MARIADB_ROOT_PASSWORD" ]]; then
+    run mysql -e "ALTER USER 'root'@'localhost' IDENTIFIED BY '${MARIADB_ROOT_PASSWORD}'; FLUSH PRIVILEGES;" || true
+    ok "MariaDB root jelszó megkísérelve beállítani."
   fi
 
-  # 3) Aria / InnoDB crash cleanup
-  run rm -f /var/lib/mysql/aria_log_control /var/lib/mysql/aria_log.* >/dev/null 2>&1 || true
-  run rm -f /var/lib/mysql/ib_logfile* >/dev/null 2>&1 || true
-
-  # 4) HA MÉG NINCS INITIALIZÁLVA → bootstrap
-  if [[ ! -d /var/lib/mysql/mysql ]]; then
-    warn "MariaDB adatbázis nem inicializált – bootstrap indul."
-    run mariadb-install-db --user=mysql --basedir=/usr --datadir=/var/lib/mysql || {
-      set_status "MariaDB" "FAIL" "init db"
-      return 1
-    }
-  fi
-
-  # 5) indulás
-  run systemctl daemon-reexec || true
-  run systemctl enable mariadb || true
-  run systemctl restart mariadb || true
-
-  # 6) ellenőrzés
   if is_service_active mariadb; then
     set_status "MariaDB" "OK" "fut"
     ok "MariaDB fut."
     return 0
+  else
+    set_status "MariaDB" "FAIL" "service nem aktív"
+    warn "MariaDB nem aktív."
+    return 1
   fi
-
-  # ha ide jutunk: HARD FAIL → logoljuk
-  warn "MariaDB továbbra sem aktív – részletek:"
-  run systemctl status mariadb --no-pager -l || true
-  run journalctl -u mariadb --no-pager -n 150 || true
-
-  set_status "MariaDB" "FAIL" "service nem aktív"
-  return 1
 }
 
-
-
 install_phpmyadmin() {
-  section "phpMyAdmin – telepítés"
+  section "phpMyAdmin"
+  if ! $ENABLE_PHPMYADMIN; then
+    set_status "phpMyAdmin" "SKIP" "kikapcsolva"
+    warn "phpMyAdmin kihagyva (kikapcsolva)."
+    return 0
+  fi
+
   if dpkg -s phpmyadmin >/dev/null 2>&1; then
     ok "phpMyAdmin már telepítve."
     set_status "phpMyAdmin" "OK" "telepítve"
@@ -553,7 +390,7 @@ install_phpmyadmin() {
 
   if apt_install phpmyadmin; then
     run phpenmod mbstring >/dev/null 2>&1 || true
-    run systemctl reload apache2 >/dev/null 2>&1 || true
+    run systemctl reload apache2 || true
     ok "phpMyAdmin telepítve. Elérés: /phpmyadmin"
     set_status "phpMyAdmin" "OK" "telepítve"
     return 0
@@ -565,7 +402,13 @@ install_phpmyadmin() {
 }
 
 install_mosquitto() {
-  section "Mosquitto – telepítés"
+  section "Mosquitto MQTT"
+  if ! $ENABLE_MOSQUITTO; then
+    set_status "Mosquitto" "SKIP" "kikapcsolva"
+    warn "Mosquitto kihagyva (kikapcsolva)."
+    return 0
+  fi
+
   if dpkg -s mosquitto >/dev/null 2>&1; then
     ok "Mosquitto már telepítve."
   else
@@ -585,14 +428,20 @@ install_mosquitto() {
 }
 
 install_ssh() {
-  section "SSH – telepítés"
+  section "SSH"
+  if ! $ENABLE_SSH; then
+    set_status "SSH" "SKIP" "kikapcsolva"
+    warn "SSH kihagyva (kikapcsolva)."
+    return 0
+  fi
+
   if dpkg -s openssh-server >/dev/null 2>&1; then
     ok "OpenSSH Server már telepítve."
   else
     apt_install openssh-server || { set_status "SSH" "FAIL" "apt install"; return 1; }
   fi
 
-  run systemctl enable --now ssh >/dev/null 2>&1 || run systemctl enable --now sshd >/dev/null 2>&1 || true
+  run systemctl enable --now ssh || run systemctl enable --now sshd || true
   if is_service_active ssh || is_service_active sshd; then
     set_status "SSH" "OK" "fut"
     ok "SSH fut."
@@ -605,7 +454,13 @@ install_ssh() {
 }
 
 install_ufw() {
-  section "UFW – telepítés"
+  section "UFW tűzfal"
+  if ! $ENABLE_UFW; then
+    set_status "UFW" "SKIP" "kikapcsolva"
+    warn "UFW kihagyva (kikapcsolva)."
+    return 0
+  fi
+
   if dpkg -s ufw >/dev/null 2>&1; then
     ok "UFW már telepítve."
   else
@@ -616,12 +471,13 @@ install_ufw() {
   run ufw default deny incoming || true
   run ufw default allow outgoing || true
 
-  $UFW_ALLOW_SSH      && run ufw allow OpenSSH >/dev/null 2>&1 || true
-  $UFW_ALLOW_HTTP     && run ufw allow 80/tcp >/dev/null 2>&1 || true
-  $UFW_ALLOW_HTTPS    && run ufw allow 443/tcp >/dev/null 2>&1 || true
-  $UFW_ALLOW_MQTT     && run ufw allow 1883/tcp >/dev/null 2>&1 || true
-  $UFW_ALLOW_NODE_RED && run ufw allow "${NODE_RED_PORT}/tcp" >/dev/null 2>&1 || true
+  $UFW_ALLOW_SSH       && run ufw allow OpenSSH >/dev/null 2>&1 || true
+  $UFW_ALLOW_HTTP      && run ufw allow 80/tcp >/dev/null 2>&1 || true
+  $UFW_ALLOW_HTTPS     && run ufw allow 443/tcp >/dev/null 2>&1 || true
+  $UFW_ALLOW_MQTT      && run ufw allow 1883/tcp >/dev/null 2>&1 || true
+  $UFW_ALLOW_NODE_RED  && run ufw allow "${NODE_RED_PORT}/tcp" >/dev/null 2>&1 || true
 
+  # Debianon néha false-negative az "active" ellenőrzés, ezért:
   run systemctl enable --now ufw >/dev/null 2>&1 || true
   run ufw --force enable || true
   run sleep 1 || true
@@ -631,6 +487,7 @@ install_ufw() {
     ok "UFW aktív."
     return 0
   else
+    # Nem állítjuk FAIL-re automatikusan, mert gyakran csak UI/VM issue.
     warn "UFW státusz nem egyértelmű (lehet false-negative). Ellenőrzés: ufw status verbose"
     set_status "UFW" "FAIL" "nem aktív (vagy false-negative)"
     return 1
@@ -638,18 +495,20 @@ install_ufw() {
 }
 
 install_nodejs_lts_nodesource() {
+  # Node.js LTS NodeSource-ból (apt repo helyett) – Node-RED miatt kritikus.
   section "Node.js LTS (NodeSource)"
 
+  # Ha már van node, nézzük a verziót: Node-RED 3.x-hez javasolt >= 18
   if command -v node >/dev/null 2>&1; then
-    ok "Node már telepítve: $(node -v 2>/dev/null || true)"
-    if command -v npm >/dev/null 2>&1; then
-      ok "npm elérhető: $(npm -v 2>/dev/null || true)"
-      return 0
-    fi
+    local v
+    v="$(node -v 2>/dev/null || true)"
+    ok "Node már telepítve: ${v}"
+    return 0
   fi
 
   apt_install curl ca-certificates gnupg || return 1
 
+  # setup script
   if ! run bash -c "curl -fsSL https://deb.nodesource.com/setup_${NODE_LTS_MAJOR}.x | bash -"; then
     return 1
   fi
@@ -665,14 +524,21 @@ install_nodejs_lts_nodesource() {
 }
 
 install_node_red() {
-  section "Node-RED – telepítés"
+  section "Node-RED"
+  if ! $ENABLE_NODE_RED; then
+    set_status "Node-RED" "SKIP" "kikapcsolva"
+    warn "Node-RED kihagyva (kikapcsolva)."
+    return 0
+  fi
 
+  # Node.js LTS (NodeSource)
   if ! install_nodejs_lts_nodesource; then
     set_status "Node-RED" "FAIL" "nodejs/npm"
     fail "Node.js / npm telepítés sikertelen."
     return 1
   fi
 
+  # Node-RED telepítés
   if ! command -v node-red >/dev/null 2>&1; then
     run_task "Node-RED (npm install -g)" npm install -g --unsafe-perm --no-audit --no-fund node-red \
       || { set_status "Node-RED" "FAIL" "npm install"; return 1; }
@@ -680,6 +546,7 @@ install_node_red() {
     ok "Node-RED parancs már elérhető."
   fi
 
+  # Abszolút bináris útvonal (systemd miatt kritikus)
   local NODE_RED_BIN
   NODE_RED_BIN="$(command -v node-red || true)"
   if [[ -z "$NODE_RED_BIN" ]]; then
@@ -689,10 +556,12 @@ install_node_red() {
   fi
   ok "Node-RED bináris: $NODE_RED_BIN"
 
+  # Dedikált user + userDir
   id -u nodered >/dev/null 2>&1 || run useradd -r -m -s /usr/sbin/nologin nodered || true
   run mkdir -p "$NODE_RED_USERDIR" || true
   run chown -R nodered:nodered "$NODE_RED_USERDIR" || true
 
+  # Systemd unit
   cat > /etc/systemd/system/nodered.service <<UNIT
 [Unit]
 Description=Node-RED
@@ -704,6 +573,7 @@ User=nodered
 Group=nodered
 WorkingDirectory=${NODE_RED_USERDIR}
 
+# npm -g gyakran /usr/local/bin-be telepít, ezt systemd alatt külön meg kell adni
 Environment="PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 Environment="NODE_RED_OPTIONS=--userDir ${NODE_RED_USERDIR} --port ${NODE_RED_PORT}"
 
@@ -733,25 +603,6 @@ UNIT
 }
 
 ############################################
-# AKCIÓ DISPATCH
-############################################
-do_component() { # do_component "Apache" "$ACTION_APACHE" install_fn remove_fn
-  local name="$1" action="$2" install_fn="$3" remove_fn="$4"
-  case "$action" in
-    install) "$install_fn" ;;
-    remove)  "$remove_fn" ;;
-    skip)
-      set_status "$name" "SKIP" "kihagyva"
-      warn "${name} kihagyva."
-      ;;
-    *)
-      set_status "$name" "SKIP" "ismeretlen akció"
-      warn "${name}: ismeretlen akció -> kihagyva."
-      ;;
-  esac
-}
-
-############################################
 # ÖSSZEGZÉS
 ############################################
 print_summary() {
@@ -769,35 +620,19 @@ print_summary() {
 }
 
 ############################################
-# INTERAKTÍV VÁLASZTÁS (ZENE + APT + I/R/S)
+# INTERAKTÍV VÁLASZTÁS
 ############################################
-configure_actions() {
-  section "Beállítások"
-
-  if ask_yn "Menjen zene induláskor? (YouTube)" "N"; then
-    ENABLE_MUSIC=true
-  else
-    ENABLE_MUSIC=false
-  fi
-
-  if ask_yn "Futtassunk APT update-et a telepítések előtt?" "Y"; then
-    DO_APT_UPDATE=true
-    ok "APT update: engedélyezve"
-  else
-    DO_APT_UPDATE=false
-    warn "APT update: kihagyva (telepítésnél gond lehet, ha régi a csomaglista)"
-  fi
-  echo
-
-  section "Komponensek – válassz műveletet"
-  ACTION_APACHE="$(ask_action "Apache" "I")"
-  ACTION_PHP="$(ask_action "PHP" "I")"
-  ACTION_MARIADB="$(ask_action "MariaDB" "I")"
-  ACTION_PHPMYADMIN="$(ask_action "phpMyAdmin" "I")"
-  ACTION_MOSQUITTO="$(ask_action "Mosquitto" "I")"
-  ACTION_SSH="$(ask_action "SSH" "I")"
-  ACTION_NODE_RED="$(ask_action "Node-RED" "I")"
-  ACTION_UFW="$(ask_action "UFW" "I")"
+configure_toggles() {
+  section "Komponensek kiválasztása"
+  ask_yn "Menjen zene induláskor? (YouTube)" "N" && ENABLE_MUSIC=true || ENABLE_MUSIC=false
+  ask_yn "Apache telepítése?" "Y" && ENABLE_APACHE=true || ENABLE_APACHE=false
+  ask_yn "PHP telepítése?" "Y" && ENABLE_PHP=true || ENABLE_PHP=false
+  ask_yn "MariaDB telepítése?" "Y" && ENABLE_MARIADB=true || ENABLE_MARIADB=false
+  ask_yn "phpMyAdmin telepítése?" "Y" && ENABLE_PHPMYADMIN=true || ENABLE_PHPMYADMIN=false
+  ask_yn "Mosquitto MQTT telepítése?" "Y" && ENABLE_MOSQUITTO=true || ENABLE_MOSQUITTO=false
+  ask_yn "SSH telepítése?" "Y" && ENABLE_SSH=true || ENABLE_SSH=false
+  ask_yn "UFW tűzfal konfigurálása?" "Y" && ENABLE_UFW=true || ENABLE_UFW=false
+  ask_yn "Node-RED telepítése?" "Y" && ENABLE_NODE_RED=true || ENABLE_NODE_RED=false
   echo
 }
 
@@ -806,47 +641,54 @@ configure_actions() {
 ############################################
 main() {
   banner
-  configure_actions
 
-  # Zene indítása (ha kérted)
+  # Zene leállítása minden kilépésnél (CTRL+C, hiba, exit)
+  trap stop_music EXIT INT TERM
+
+  if ! is_debian_like; then
+    warn "Ez a script Debian/Ubuntu alapra készült. Lehet, hogy nem fog működni."
+  fi
+
+  if ask_yn "Szeretnéd kiválasztani, mit telepítsünk (interaktív mód)?" "Y"; then
+    configure_toggles
+  fi
+
+  hr
+  ok "Telepítés indul."
+  hr
+
   start_music
-
-  hr
-  ok "Műveletek indulnak."
-  hr
 
   local all_ok=true
 
-  do_component "Apache"     "$ACTION_APACHE"      install_apache      remove_apache      || all_ok=false
-  do_component "PHP"        "$ACTION_PHP"         install_php         remove_php         || all_ok=false
-  do_component "MariaDB"    "$ACTION_MARIADB"     install_mariadb     remove_mariadb     || all_ok=false
-  do_component "phpMyAdmin" "$ACTION_PHPMYADMIN"  install_phpmyadmin  remove_phpmyadmin  || all_ok=false
-  do_component "Mosquitto"  "$ACTION_MOSQUITTO"   install_mosquitto   remove_mosquitto   || all_ok=false
-  do_component "SSH"        "$ACTION_SSH"         install_ssh         remove_ssh         || all_ok=false
-  do_component "Node-RED"   "$ACTION_NODE_RED"    install_node_red    remove_node_red    || all_ok=false
-  do_component "UFW"        "$ACTION_UFW"         install_ufw         remove_ufw         || all_ok=false
-
-  # minden kész -> zene leállítása (kérésed szerint)
-  stop_music
+  install_apache     || all_ok=false
+  install_php        || all_ok=false
+  install_mariadb    || all_ok=false
+  install_phpmyadmin || all_ok=false
+  install_mosquitto  || all_ok=false
+  install_ssh        || all_ok=false
+  install_node_red   || all_ok=false
+  install_ufw        || all_ok=false
 
   print_summary
 
-  section "Befejezés"
   if $all_ok; then
+    section "Befejezés"
     echo -e "${GREEN}${BOLD}KÉSZ – minden lépés sikeres.${NC}"
+    echo -e "${PURPLE}»${NC} Apache:      http://<szerver-ip>/"
+    echo -e "${PURPLE}»${NC} PHP info:     http://<szerver-ip>/info.php (ha telepítve)"
+    echo -e "${PURPLE}»${NC} phpMyAdmin:   http://<szerver-ip>/phpmyadmin (ha telepítve)"
+    echo -e "${PURPLE}»${NC} Node-RED:     http://<szerver-ip>:${NODE_RED_PORT}/ (ha telepítve)"
+    echo -e "${PURPLE}»${NC} MQTT:         tcp/<szerver-ip>:1883 (ha telepítve)"
+    echo
+    exit 0
   else
+    section "Befejezés"
     echo -e "${YELLOW}${BOLD}KÉSZ – volt sikertelen lépés.${NC}"
     echo -e "${YELLOW}Nézd a logot:${NC} $LOGFILE"
+    echo
+    exit 1
   fi
-
-  echo -e "${PURPLE}»${NC} Apache:      http://<szerver-ip>/ (ha telepítve)"
-  echo -e "${PURPLE}»${NC} PHP info:     http://<szerver-ip>/info.php (ha telepítve)"
-  echo -e "${PURPLE}»${NC} phpMyAdmin:   http://<szerver-ip>/phpmyadmin (ha telepítve)"
-  echo -e "${PURPLE}»${NC} Node-RED:     http://<szerver-ip>:${NODE_RED_PORT}/ (ha telepítve)"
-  echo -e "${PURPLE}»${NC} MQTT:         tcp/<szerver-ip>:1883 (ha telepítve)"
-  echo
-
-  $all_ok && exit 0 || exit 1
 }
 
 main "$@"
