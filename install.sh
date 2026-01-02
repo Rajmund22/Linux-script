@@ -165,53 +165,50 @@ install_ufw() {
 }
  
 install_node_red() {
-  apt_install curl ca-certificates || return 1
+  apt_install curl ca-certificates nodejs npm || return 1
 
-  log "Node-RED telepítés (non-interactive --confirm-root)"
-  local rc=0
-
-  # Ne kapcsoljunk be set -e-t, mert az kint maradhat és szétcsapja a scriptet
-  if ! curl -fsSL https://github.com/node-red/linux-installers/releases/latest/download/update-nodejs-and-nodered-deb \
-      | bash -s -- --confirm-root; then
-    rc=$?
-    warn "Node-RED installer nem 0-val lépett ki (rc=$rc) – ettől még lehet jó."
+  # Ha a node-red nincs fent, felrakjuk npm-mel
+  if ! command -v node-red >/dev/null 2>&1; then
+    log "Node-RED telepítése npm-mel"
+    # --unsafe-perm kell rootos telepítéshez sok esetben
+    run npm install -g --unsafe-perm node-red || return 1
   fi
-  log "Node-RED installer exit code: $rc"
+
+  # user + mappa
+  id -u nodered >/dev/null 2>&1 || run useradd -r -m -s /usr/sbin/nologin nodered || true
+  run mkdir -p /var/lib/node-red || true
+  run chown -R nodered:nodered /var/lib/node-red || true
+
+  # Systemd unit LÉTREHOZÁSA (mindig)
+  cat > /etc/systemd/system/nodered.service <<'UNIT'
+[Unit]
+Description=Node-RED
+After=network.target
+
+[Service]
+Type=simple
+User=nodered
+Group=nodered
+WorkingDirectory=/var/lib/node-red
+Environment="NODE_RED_OPTIONS=--userDir /var/lib/node-red --port 1880"
+ExecStart=/usr/bin/env node-red $NODE_RED_OPTIONS
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+UNIT
 
   run systemctl daemon-reload || true
+  run systemctl enable --now nodered.service || true
 
-  # Service név lehet node-red vagy nodered, disztrótól függően
-  local unit=""
-  for u in node-red.service nodered.service; do
-    if systemctl list-unit-files --type=service 2>/dev/null | awk '{print $1}' | grep -qx "$u"; then
-      unit="$u"
-      break
-    fi
-  done
-
-  if [[ -n "$unit" ]]; then
-    run systemctl enable --now "$unit" || true
-  fi
-
-  # Siker, ha bármelyik service fut
-  if systemctl is-active --quiet node-red 2>/dev/null || systemctl is-active --quiet nodered 2>/dev/null; then
+  # ellenőrzés
+  if systemctl is-active --quiet nodered; then
     return 0
   fi
 
-  # Siker, ha a 1880 port hallgat (Node-RED web UI)
-  if command -v ss >/dev/null 2>&1; then
-    ss -ltnp 2>/dev/null | grep -E '(:1880)\b' >/dev/null && return 0
-  fi
-
-  # Ha itt vagyunk, adjunk hasznos logot
-  warn "Node-RED nem fut. Journal részlet:"
-  if systemctl list-unit-files --type=service | grep -q '^node-red\.service'; then
-    journalctl -u node-red.service --no-pager -n 80 2>/dev/null | tee -a "$LOGFILE" >/dev/null || true
-  fi
-  if systemctl list-unit-files --type=service | grep -q '^nodered\.service'; then
-    journalctl -u nodered.service --no-pager -n 80 2>/dev/null | tee -a "$LOGFILE" >/dev/null || true
-  fi
-
+  warn "Node-RED nem indult el, journal:"
+  journalctl -u nodered.service --no-pager -n 80 2>/dev/null | tee -a "$LOGFILE" >/dev/null || true
   return 1
 }
 
@@ -256,7 +253,7 @@ run_install INSTALL_UFW        "UFW"       install_ufw
 # HEALTH CHECK + PORT CHECK
 ############################################
 log "HEALTH CHECK"
-for svc in apache2 ssh mosquitto mariadb node-red nodered; do
+for svc in apache2 ssh mosquitto mariadb nodered; do
   if systemctl is-active --quiet "$svc" 2>/dev/null; then
     ok "$svc RUNNING"
   else
