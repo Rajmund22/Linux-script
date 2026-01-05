@@ -49,85 +49,6 @@ MUSIC_PID=""
 RED="\e[31m"; GREEN="\e[32m"; YELLOW="\e[33m"; BLUE="\e[34m"
 PURPLE="\e[35m"; CYAN="\e[36m"; BOLD="\e[1m"; NC="\e[0m"
 GRAY="\e[90m"
-rgb_finish() {
-  local colors=(
-    "\e[31m" # piros
-    "\e[33m" # sárga
-    "\e[32m" # zöld
-    "\e[36m" # cyan
-    "\e[34m" # kék
-    "\e[35m" # lila
-  )
-
-  clear
-  tput civis
-  stty -echo
-  stty cbreak
-
-  trap 'stty sane; tput cnorm; clear' EXIT
-
-  local i=0
-  while true; do
-    # SPACE figyelés
-    if read -rsn1 -t 0.05 key; then
-      [[ "$key" == " " ]] && break
-    fi
-
-    clear
-    local color="${colors[$((i % ${#colors[@]}))]}"
-
-    local rows cols
-    rows=$(tput lines)
-    cols=$(tput cols)
-
-    # közép
-    local row=$((rows / 2 - 3))
-    local col=$(((cols - 38) / 2))
-    (( col < 0 )) && col=0
-
-    tput cup "$row" "$col"
-    echo -e "${BOLD}${color}"
-    echo "███████╗████████╗██╗   ██╗ ██████╗ "
-    tput cup $((row+1)) "$col"
-    echo "██╔════╝╚══██╔══╝██║   ██║██╔════╝ "
-    tput cup $((row+2)) "$col"
-    echo "███████╗   ██║   ██║   ██║██║  ███╗"
-    tput cup $((row+3)) "$col"
-    echo "╚════██║   ██║   ██║   ██║██║   ██║"
-    tput cup $((row+4)) "$col"
-    echo "███████║   ██║   ╚██████╔╝╚██████╔╝"
-    tput cup $((row+5)) "$col"
-    echo "╚══════╝   ╚═╝    ╚═════╝  ╚═════╝ "
-    tput cup $((row+6)) "$col"
-    echo "            ██████╗     ██████╗ "
-    tput cup $((row+7)) "$col"
-    echo "           ██╔════╝    ██╔════╝ "
-    tput cup $((row+8)) "$col"
-    echo "           ██║  ███╗   ██║  ███╗"
-    tput cup $((row+9)) "$col"
-    echo "           ██║   ██║   ██║   ██║"
-    tput cup $((row+10)) "$col"
-    echo "           ╚██████╔╝   ╚██████╔╝"
-    tput cup $((row+11)) "$col"
-    echo "            ╚═════╝     ╚═════╝ "
-    echo -e "${NC}"
-
-    # alsó infó
-    tput cup $((rows - 2)) "$col"
-    echo -e "${GRAY}SPACE = kilépés${NC}"
-
-    # jobb alsó név
-    tput cup $((rows - 2)) $((cols - 26))
-    echo -e "\e[35mDányi Rajmund 12.B\e[0m"
-
-    ((i++))
-    sleep 0.12
-  done
-
-  stty sane
-  tput cnorm
-  clear
-}
 
 ############################################
 # ÁLLAPOTOK (összegzéshez)
@@ -789,9 +710,6 @@ main() {
   install_ufw        || all_ok=false
 
   print_summary
-
-  sleep 5
-  rgb_finish
 
   if $all_ok; then
     section "Befejezés"
