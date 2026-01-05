@@ -60,15 +60,15 @@ rgb_finish() {
   )
 
   clear
-  tput civis        # kurzor elrejtése
-  stty -echo        # ne írja ki a lenyomott billentyűt
-  stty cbreak       # azonnali billentyűolvasás
+  tput civis
+  stty -echo
+  stty cbreak
 
   trap 'stty sane; tput cnorm; clear' EXIT
 
   local i=0
   while true; do
-    # billentyűfigyelés (nem blokkol)
+    # SPACE figyelés
     if read -rsn1 -t 0.05 key; then
       [[ "$key" == " " ]] && break
     fi
@@ -79,39 +79,46 @@ rgb_finish() {
     local rows cols
     rows=$(tput lines)
     cols=$(tput cols)
-    local row=$((rows / 2))
-    local col=$(((cols - 40) / 2))
+
+    # közép
+    local row=$((rows / 2 - 3))
+    local col=$(((cols - 38) / 2))
     (( col < 0 )) && col=0
 
     tput cup "$row" "$col"
     echo -e "${BOLD}${color}"
-    echo "████████╗███████╗██╗     ███████╗██████╗ ██╗████████╗███████╗"
+    echo "███████╗████████╗██╗   ██╗ ██████╗ "
     tput cup $((row+1)) "$col"
-    echo "╚══██╔══╝██╔════╝██║     ██╔════╝██╔══██╗██║╚══██╔══╝██╔════╝"
+    echo "██╔════╝╚══██╔══╝██║   ██║██╔════╝ "
     tput cup $((row+2)) "$col"
-    echo "   ██║   █████╗  ██║     █████╗  ██████╔╝██║   ██║   █████╗  "
+    echo "███████╗   ██║   ██║   ██║██║  ███╗"
     tput cup $((row+3)) "$col"
-    echo "   ██║   ██╔══╝  ██║     ██╔══╝  ██╔═══╝ ██║   ██║   ██╔══╝  "
+    echo "╚════██║   ██║   ██║   ██║██║   ██║"
     tput cup $((row+4)) "$col"
-    echo "   ██║   ███████╗███████╗███████╗██║     ██║   ██║   ███████╗"
+    echo "███████║   ██║   ╚██████╔╝╚██████╔╝"
     tput cup $((row+5)) "$col"
-    echo "   ╚═╝   ╚══════╝╚══════╝╚══════╝╚═╝     ╚═╝   ╚═╝   ╚══════╝"
+    echo "╚══════╝   ╚═╝    ╚═════╝  ╚═════╝ "
+    tput cup $((row+6)) "$col"
+    echo "            ██████╗     ██████╗ "
     tput cup $((row+7)) "$col"
-    echo "                ██████╗ ███████╗███████╗███████╗"
+    echo "           ██╔════╝    ██╔════╝ "
     tput cup $((row+8)) "$col"
-    echo "               ██╔═══██╗██╔════╝██╔════╝██╔════╝"
+    echo "           ██║  ███╗   ██║  ███╗"
     tput cup $((row+9)) "$col"
-    echo "               ██║   ██║█████╗  █████╗  █████╗  "
+    echo "           ██║   ██║   ██║   ██║"
     tput cup $((row+10)) "$col"
-    echo "               ██║   ██║██╔══╝  ██╔══╝  ██╔══╝  "
+    echo "           ╚██████╔╝   ╚██████╔╝"
     tput cup $((row+11)) "$col"
-    echo "               ╚██████╔╝██║     ██║     ███████╗"
-    tput cup $((row+12)) "$col"
-    echo "                ╚═════╝ ╚═╝     ╚═╝     ╚══════╝"
+    echo "            ╚═════╝     ╚═════╝ "
     echo -e "${NC}"
 
-    tput cup $((row+14)) "$col"
+    # alsó infó
+    tput cup $((rows - 2)) "$col"
     echo -e "${GRAY}SPACE = kilépés${NC}"
+
+    # jobb alsó név
+    tput cup $((rows - 2)) $((cols - 26))
+    echo -e "\e[35mDányi Rajmund 12.B\e[0m"
 
     ((i++))
     sleep 0.12
