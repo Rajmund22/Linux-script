@@ -49,6 +49,78 @@ MUSIC_PID=""
 RED="\e[31m"; GREEN="\e[32m"; YELLOW="\e[33m"; BLUE="\e[34m"
 PURPLE="\e[35m"; CYAN="\e[36m"; BOLD="\e[1m"; NC="\e[0m"
 GRAY="\e[90m"
+rgb_finish() {
+  local colors=(
+    "\e[31m" # piros
+    "\e[33m" # sárga
+    "\e[32m" # zöld
+    "\e[36m" # cyan
+    "\e[34m" # kék
+    "\e[35m" # lila
+  )
+
+  clear
+  tput civis        # kurzor elrejtése
+  stty -echo        # ne írja ki a lenyomott billentyűt
+  stty cbreak       # azonnali billentyűolvasás
+
+  trap 'stty sane; tput cnorm; clear' EXIT
+
+  local i=0
+  while true; do
+    # billentyűfigyelés (nem blokkol)
+    if read -rsn1 -t 0.05 key; then
+      [[ "$key" == " " ]] && break
+    fi
+
+    clear
+    local color="${colors[$((i % ${#colors[@]}))]}"
+
+    local rows cols
+    rows=$(tput lines)
+    cols=$(tput cols)
+    local row=$((rows / 2))
+    local col=$(((cols - 40) / 2))
+    (( col < 0 )) && col=0
+
+    tput cup "$row" "$col"
+    echo -e "${BOLD}${color}"
+    echo "████████╗███████╗██╗     ███████╗██████╗ ██╗████████╗███████╗"
+    tput cup $((row+1)) "$col"
+    echo "╚══██╔══╝██╔════╝██║     ██╔════╝██╔══██╗██║╚══██╔══╝██╔════╝"
+    tput cup $((row+2)) "$col"
+    echo "   ██║   █████╗  ██║     █████╗  ██████╔╝██║   ██║   █████╗  "
+    tput cup $((row+3)) "$col"
+    echo "   ██║   ██╔══╝  ██║     ██╔══╝  ██╔═══╝ ██║   ██║   ██╔══╝  "
+    tput cup $((row+4)) "$col"
+    echo "   ██║   ███████╗███████╗███████╗██║     ██║   ██║   ███████╗"
+    tput cup $((row+5)) "$col"
+    echo "   ╚═╝   ╚══════╝╚══════╝╚══════╝╚═╝     ╚═╝   ╚═╝   ╚══════╝"
+    tput cup $((row+7)) "$col"
+    echo "                ██████╗ ███████╗███████╗███████╗"
+    tput cup $((row+8)) "$col"
+    echo "               ██╔═══██╗██╔════╝██╔════╝██╔════╝"
+    tput cup $((row+9)) "$col"
+    echo "               ██║   ██║█████╗  █████╗  █████╗  "
+    tput cup $((row+10)) "$col"
+    echo "               ██║   ██║██╔══╝  ██╔══╝  ██╔══╝  "
+    tput cup $((row+11)) "$col"
+    echo "               ╚██████╔╝██║     ██║     ███████╗"
+    tput cup $((row+12)) "$col"
+    echo "                ╚═════╝ ╚═╝     ╚═╝     ╚══════╝"
+    echo -e "${NC}"
+
+    tput cup $((row+14)) "$col"
+    echo -e "${GRAY}SPACE = kilépés${NC}"
+
+    ((i++))
+    sleep 0.12
+  done
+
+  stty sane
+  tput cnorm
+  clear
+}
 
 ############################################
 # ÁLLAPOTOK (összegzéshez)
@@ -710,6 +782,9 @@ main() {
   install_ufw        || all_ok=false
 
   print_summary
+
+  sleep 5
+  rgb_finish
 
   if $all_ok; then
     section "Befejezés"
