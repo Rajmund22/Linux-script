@@ -87,7 +87,7 @@ banner() {
   echo -e "${CYAN}${BOLD}"
   cat << "EOF"
 ╔══════════════════════════════════════════════════════════════╗
-║                 SHOW-OFF SERVER INSTALLER                   ║
+║                 SHOW-OFF SERVER INSTALLER                    ║
 ║        Apache | Node-RED | MQTT | MariaDB | PHP | UFW        ║
 ║              Debian / Ubuntu  •  VirtualBox-safe             ║
 ╚══════════════════════════════════════════════════════════════╝
