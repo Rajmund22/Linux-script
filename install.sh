@@ -57,15 +57,23 @@ show_success_screen() {
   rows=$(tput lines)
   cols=$(tput cols)
 
-  local text="SIKER"
-  local text_row=$((rows / 2))
-  local text_col=$(((cols - ${#text}) / 2))
+  # ASCII SIKER
+  read -r -d '' SIKER_ASCII <<'EOF'
+ ███████╗██╗██╗  ██╗███████╗██████╗ 
+ ██╔════╝██║██║ ██╔╝██╔════╝██╔══██╗
+ ███████╗██║█████╔╝ █████╗  ██████╔╝
+ ╚════██║██║██╔═██╗ ██╔══╝  ██╔══██╗
+ ███████║██║██║  ██╗███████╗██║  ██║
+ ╚══════╝╚═╝╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝
+EOF
 
-  local name="Dányi Rajmund 12.B"
+  local text_height
+  text_height=$(echo "$SIKER_ASCII" | wc -l)
+
+  local start_row=$(((rows - text_height) / 2))
   local name_row=$((rows - 2))
-  local name_col=1
 
-  for i in {1..20}; do
+  for i in {1..25}; do
     case $((i % 3)) in
       0) color="\e[31m" ;; # piros
       1) color="\e[32m" ;; # zöld
@@ -73,13 +81,18 @@ show_success_screen() {
     esac
 
     clear
-    tput cup "$text_row" "$text_col"
-    echo -e "${color}\e[1m${text}\e[0m"
 
-    tput cup "$name_row" "$name_col"
+    local r=$start_row
+    while IFS= read -r line; do
+      tput cup "$r" $(((cols - ${#line}) / 2))
+      echo -e "${color}\e[1m${line}\e[0m"
+      ((r++))
+    done <<< "$SIKER_ASCII"
+
+    tput cup "$name_row" 1
     echo -e "Dányi Rajmund 12.B"
 
-    sleep 0.2
+    sleep 0.18
   done
 
   tput cnorm   # kurzor vissza
