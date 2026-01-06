@@ -49,6 +49,42 @@ MUSIC_PID=""
 RED="\e[31m"; GREEN="\e[32m"; YELLOW="\e[33m"; BLUE="\e[34m"
 PURPLE="\e[35m"; CYAN="\e[36m"; BOLD="\e[1m"; NC="\e[0m"
 GRAY="\e[90m"
+show_success_screen() {
+  clear
+  tput civis   # kurzor elrejtése
+
+  local rows cols
+  rows=$(tput lines)
+  cols=$(tput cols)
+
+  local text="SIKER"
+  local text_row=$((rows / 2))
+  local text_col=$(((cols - ${#text}) / 2))
+
+  local name="Dányi Rajmund 12.B"
+  local name_row=$((rows - 2))
+  local name_col=1
+
+  for i in {1..20}; do
+    case $((i % 3)) in
+      0) color="\e[31m" ;; # piros
+      1) color="\e[32m" ;; # zöld
+      2) color="\e[34m" ;; # kék
+    esac
+
+    clear
+    tput cup "$text_row" "$text_col"
+    echo -e "${color}\e[1m${text}\e[0m"
+
+    tput cup "$name_row" "$name_col"
+    echo -e "Dányi Rajmund 12.B"
+
+    sleep 0.2
+  done
+
+  tput cnorm   # kurzor vissza
+}
+
 
 ############################################
 # ÁLLAPOTOK (összegzéshez)
@@ -712,22 +748,25 @@ main() {
   print_summary
 
   if $all_ok; then
-    section "Befejezés"
-    echo -e "${GREEN}${BOLD}KÉSZ – minden lépés sikeres.${NC}"
-    echo -e "${PURPLE}»${NC} Apache:      http://<szerver-ip>/"
-    echo -e "${PURPLE}»${NC} PHP info:     http://<szerver-ip>/info.php (ha telepítve)"
-    echo -e "${PURPLE}»${NC} phpMyAdmin:   http://<szerver-ip>/phpmyadmin (ha telepítve)"
-    echo -e "${PURPLE}»${NC} Node-RED:     http://<szerver-ip>:${NODE_RED_PORT}/ (ha telepítve)"
-    echo -e "${PURPLE}»${NC} MQTT:         tcp/<szerver-ip>:1883 (ha telepítve)"
-    echo
-    exit 0
-  else
-    section "Befejezés"
-    echo -e "${YELLOW}${BOLD}KÉSZ – volt sikertelen lépés.${NC}"
-    echo -e "${YELLOW}Nézd a logot:${NC} $LOGFILE"
-    echo
-    exit 1
-  fi
+  section "Befejezés"
+  echo -e "${GREEN}${BOLD}KÉSZ – minden lépés sikeres.${NC}"
+  echo -e "${PURPLE}»${NC} Apache:      http://<szerver-ip>/"
+  echo -e "${PURPLE}»${NC} PHP info:     http://<szerver-ip>/info.php (ha telepítve)"
+  echo -e "${PURPLE}»${NC} phpMyAdmin:  http://<szerver-ip>/phpmyadmin (ha telepítve)"
+  echo -e "${PURPLE}»${NC} Node-RED:    http://<szerver-ip>:${NODE_RED_PORT}/ (ha telepítve)"
+  echo -e "${PURPLE}»${NC} MQTT:        tcp/<szerver-ip>:1883 (ha telepítve)"
+  echo
+
+  show_success_screen
+
+  exit 0
+else
+  section "Befejezés"
+  echo -e "${YELLOW}${BOLD}KÉSZ – volt sikertelen lépés.${NC}"
+  echo -e "${YELLOW}Nézd a logot:${NC} $LOGFILE"
+  echo
+  exit 1
+fi
 }
 
 main "$@"
