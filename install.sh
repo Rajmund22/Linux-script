@@ -59,7 +59,7 @@ show_success_screen() {
 
   # ASCII SIKER
   read -r -d '' SIKER_ASCII <<'EOF'
- ███████╗██╗██╗  ██╗███████╗██████╗ 
+  ███████╗██╗██╗  ██╗███████╗██████╗ 
  ██╔════╝██║██║ ██╔╝██╔════╝██╔══██╗
  ███████╗██║█████╔╝ █████╗  ██████╔╝
  ╚════██║██║██╔═██╗ ██╔══╝  ██╔══██╗
@@ -155,7 +155,10 @@ printf "%-20s : %s\n" "phpMyAdmin" "$(is_dir_exists /usr/share/phpmyadmin)"
 printf "%-20s : %s\n" "Node-RED"   "$(command -v node-red >/dev/null && echo TELEPÍTVE || echo NINCS)"
 printf "%-20s : %s\n" "Mosquitto"  "$(is_pkg_installed mosquitto)"
 
-sleep 2
+echo
+read -rp "Nyomj ENTER-t a folytatáshoz..."
+clear
+
 ############################################
 # UI ELEMEK
 ############################################
