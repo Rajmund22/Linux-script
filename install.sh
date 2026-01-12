@@ -225,28 +225,27 @@ apt_install() {
 is_debian_like() { [[ -f /etc/debian_version ]]; }
 
 ############################################
-# IGEN / NEM / TÖRLÉS KÉRDÉS
+# IGEN/NEM KÉRDÉS
 ############################################
-ask_ynd() {
-  # 0 = Y (telepítés)
-  # 1 = N (kihagyás)
-  # 2 = D (törlés)
-
+ask_yn() { # ask_yn "Kérdés?" default(Y/N)
   local q="$1"
+  local def="${2:-Y}"
   local ans=""
-
+  local hint="Y/n"
+  [[ "$def" == "N" ]] && hint="y/N"
   while true; do
-    echo -ne "${CYAN}${q}${NC} (Y=telepítés / N=kihagyás / D=törlés): "
+    echo -ne "${CYAN}${q}${NC} (${hint}): "
     read -r ans || true
-
+    ans="${ans:-$def}"
     case "$ans" in
       Y|y) return 0 ;;
       N|n) return 1 ;;
-      D|d) return 2 ;;
-      *) echo -e "${YELLOW}Csak Y, N vagy D lehet!${NC}" ;;
+      *) echo "Kérlek Y vagy N." ;;
     esac
   done
 }
+
+
 
 ############################################
 # ZENE (YouTube stream) – START/STOP (JAVÍTOTT + yt-dlp frissítés fallback)
@@ -744,132 +743,17 @@ print_summary() {
 ############################################
 configure_toggles() {
   section "Komponensek kivalasztasa"
-
   ask_yn "Menjen zene induláskor? (YouTube)" "N" && ENABLE_MUSIC=true || ENABLE_MUSIC=false
-
-  ### APACHE
-  ask_ynd "Apache kezelése?"
-  case $? in
-    0) ENABLE_APACHE=true ;;
-    1) ENABLE_APACHE=false ;;
-    2)
-      ENABLE_APACHE=false
-      section "Apache törlés"
-      run systemctl stop apache2 || true
-      run apt-get purge -y apache2 apache2-utils apache2-bin apache2.2-common || true
-      run rm -rf /etc/apache2 /var/www/html || true
-      ok "Apache eltávolítva."
-      ;;
-  esac
-
-  ### PHP
-  ask_ynd "PHP kezelése?"
-  case $? in
-    0) ENABLE_PHP=true ;;
-    1) ENABLE_PHP=false ;;
-    2)
-      ENABLE_PHP=false
-      section "PHP törlés"
-      run apt-get purge -y 'php*' || true
-      run rm -rf /etc/php || true
-      ok "PHP eltávolítva."
-      ;;
-  esac
-
-  ### MARIADB
-  ask_ynd "MariaDB kezelése?"
-  case $? in
-    0) ENABLE_MARIADB=true ;;
-    1) ENABLE_MARIADB=false ;;
-    2)
-      ENABLE_MARIADB=false
-      section "MariaDB törlés"
-      run systemctl stop mariadb || true
-      run apt-get purge -y mariadb-server mariadb-client mariadb-common || true
-      run rm -rf /var/lib/mysql /etc/mysql || true
-      ok "MariaDB eltávolítva."
-      ;;
-  esac
-
-  ### PHPMYADMIN
-  ask_ynd "phpMyAdmin kezelése?"
-  case $? in
-    0) ENABLE_PHPMYADMIN=true ;;
-    1) ENABLE_PHPMYADMIN=false ;;
-    2)
-      ENABLE_PHPMYADMIN=false
-      section "phpMyAdmin törlés"
-      run apt-get purge -y phpmyadmin || true
-      run rm -rf /usr/share/phpmyadmin || true
-      ok "phpMyAdmin eltávolítva."
-      ;;
-  esac
-
-  ### MOSQUITTO
-  ask_ynd "Mosquitto MQTT kezelése?"
-  case $? in
-    0) ENABLE_MOSQUITTO=true ;;
-    1) ENABLE_MOSQUITTO=false ;;
-    2)
-      ENABLE_MOSQUITTO=false
-      section "Mosquitto törlés"
-      run systemctl stop mosquitto || true
-      run apt-get purge -y mosquitto mosquitto-clients || true
-      run rm -rf /etc/mosquitto || true
-      ok "Mosquitto eltávolítva."
-      ;;
-  esac
-
-  ### SSH
-  ask_ynd "SSH kezelése?"
-  case $? in
-    0) ENABLE_SSH=true ;;
-    1) ENABLE_SSH=false ;;
-    2)
-      ENABLE_SSH=false
-      section "SSH törlés"
-      run systemctl stop ssh || true
-      run apt-get purge -y openssh-server || true
-      run rm -rf /etc/ssh || true
-      ok "SSH eltávolítva."
-      ;;
-  esac
-
-  ### NODE-RED
-  ask_ynd "Node-RED kezelése?"
-  case $? in
-    0) ENABLE_NODE_RED=true ;;
-    1) ENABLE_NODE_RED=false ;;
-    2)
-      ENABLE_NODE_RED=false
-      section "Node-RED törlés"
-      run systemctl stop nodered.service || true
-      run npm remove -g node-red || true
-      run userdel -r nodered 2>/dev/null || true
-      run rm -rf /var/lib/node-red /etc/systemd/system/nodered.service || true
-      run systemctl daemon-reload || true
-      ok "Node-RED eltávolítva."
-      ;;
-  esac
-
-  ### UFW
-  ask_ynd "UFW tűzfal kezelése?"
-  case $? in
-    0) ENABLE_UFW=true ;;
-    1) ENABLE_UFW=false ;;
-    2)
-      ENABLE_UFW=false
-      section "UFW törlés"
-      run ufw --force disable || true
-      run apt-get purge -y ufw || true
-      run rm -rf /etc/ufw || true
-      ok "UFW eltávolítva."
-      ;;
-  esac
-
+  ask_yn "Apache telepítése?" "Y" && ENABLE_APACHE=true || ENABLE_APACHE=false
+  ask_yn "PHP telepítése?" "Y" && ENABLE_PHP=true || ENABLE_PHP=false
+  ask_yn "MariaDB telepítése?" "Y" && ENABLE_MARIADB=true || ENABLE_MARIADB=false
+  ask_yn "phpMyAdmin telepítése?" "Y" && ENABLE_PHPMYADMIN=true || ENABLE_PHPMYADMIN=false
+  ask_yn "Mosquitto MQTT telepítése?" "Y" && ENABLE_MOSQUITTO=true || ENABLE_MOSQUITTO=false
+  ask_yn "SSH telepítése?" "Y" && ENABLE_SSH=true || ENABLE_SSH=false
+  ask_yn "UFW tűzfal konfigurálása?" "Y" && ENABLE_UFW=true || ENABLE_UFW=false
+  ask_yn "Node-RED telepítése?" "Y" && ENABLE_NODE_RED=true || ENABLE_NODE_RED=false
   echo
 }
-
 
 ############################################
 # FŐ FUTÁS
