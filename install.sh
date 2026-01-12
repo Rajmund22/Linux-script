@@ -97,6 +97,20 @@ EOF
 
   tput cnorm   # kurzor vissza
 }
+############################################
+# STATUS CHECK HELPERS
+############################################
+is_pkg_installed() {
+  dpkg -s "$1" >/dev/null 2>&1 && echo "TELEPÍTVE" || echo "NINCS"
+}
+
+is_service_active() {
+  systemctl is-active --quiet "$1" 2>/dev/null && echo "FUT" || echo "NEM FUT"
+}
+
+is_dir_exists() {
+  [[ -d "$1" ]] && echo "TELEPÍTVE" || echo "NINCS"
+}
 
 
 ############################################
@@ -127,7 +141,21 @@ run() {
   log "RUN: $*"
   "$@" >> "$LOGFILE" 2>&1
 }
+############################################
+# ELŐZETES RENDSZER ÁLLAPOT
+############################################
+echo
+echo -e "${BOLD}${CYAN}ELŐZETES SZERVER ÁLLAPOT:${NC}"
+echo "-------------------------------------------"
 
+printf "%-20s : %s\n" "Apache2"    "$(is_pkg_installed apache2)"
+printf "%-20s : %s\n" "MariaDB"    "$(is_pkg_installed mariadb-server)"
+printf "%-20s : %s\n" "PHP"        "$(is_pkg_installed php)"
+printf "%-20s : %s\n" "phpMyAdmin" "$(is_dir_exists /usr/share/phpmyadmin)"
+printf "%-20s : %s\n" "Node-RED"   "$(command -v node-red >/dev/null && echo TELEPÍTVE || echo NINCS)"
+printf "%-20s : %s\n" "Mosquitto"  "$(is_pkg_installed mosquitto)"
+
+sleep 2
 ############################################
 # UI ELEMEK
 ############################################
