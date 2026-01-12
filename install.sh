@@ -573,7 +573,7 @@ install_ssh() {
 }
 
 install_ufw() {
-  section "UFW tűzfal"
+  section "UFW tuzfal"
   if ! $ENABLE_UFW; then
     set_status "UFW" "SKIP" "kikapcsolva"
     warn "UFW kihagyva (kikapcsolva)."
@@ -742,7 +742,7 @@ print_summary() {
 # INTERAKTÍV VÁLASZTÁS
 ############################################
 configure_toggles() {
-  section "Komponensek kiválasztása"
+  section "Komponensek kivalasztasa"
   ask_yn "Menjen zene induláskor? (YouTube)" "N" && ENABLE_MUSIC=true || ENABLE_MUSIC=false
   ask_yn "Apache telepítése?" "Y" && ENABLE_APACHE=true || ENABLE_APACHE=false
   ask_yn "PHP telepítése?" "Y" && ENABLE_PHP=true || ENABLE_PHP=false
