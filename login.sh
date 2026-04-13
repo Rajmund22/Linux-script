@@ -146,12 +146,13 @@ countdown() {
     do
         min=$((seconds / 60))
         sec=$((seconds % 60))
-        printf "\r⏳ Hátralévő idő: %02d:%02d " $min $sec
+
+        echo "⏳ Hátralévő idő: $(printf "%02d:%02d" $min $sec)"
+
         sleep 1
         ((seconds--))
     done
 
-    echo ""
     echo ""
     echo "🚓 ELKAPTAK A RENDŐRÖK!"
     echo "❌ VESZTETTÉL"
