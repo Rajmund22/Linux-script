@@ -140,6 +140,7 @@ countdown() {
     echo "========================================="
     echo ""
     echo "⏳ VISSZASZÁMLÁLÁS ELINDULT (05:00)"
+    echo "💻 Írd be bármikor: unlock_exit"
     echo ""
 
     while [ $seconds -gt 0 ]
@@ -149,8 +150,20 @@ countdown() {
 
         echo "⏳ Hátralévő idő: $(printf "%02d:%02d" $min $sec)"
 
-        sleep 1
-        ((seconds--))
+        # 10 másodperc várakozás (de közben figyelünk!)
+        for i in {1..10}
+        do
+            # ha közben beírták a parancsot → kilép
+            if [[ "$LAST_COMMAND" == "unlock_exit" ]]; then
+                echo ""
+                echo "🎉 SIKER! KIJUTOTTÁL"
+                exit
+            fi
+
+            sleep 1
+            ((seconds--))
+            [ $seconds -le 0 ] && break
+        done
     done
 
     echo ""
@@ -183,4 +196,7 @@ done
 
 cd "$BASE"
 export PS1="(DISCORD-SERVER) $ "
+LAST_COMMAND=""
+
+trap 'LAST_COMMAND=$BASH_COMMAND' DEBUG
 exec bash
