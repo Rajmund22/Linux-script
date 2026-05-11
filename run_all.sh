@@ -15,7 +15,7 @@ clear
 echo "[1/5] Starting Package Installer..."
 sleep 2
 
-./installer.sh
+./fake_installer.sh
 
 echo
 echo "Press ENTER to continue..."
@@ -33,7 +33,7 @@ echo
 
 while true
 do
-    ./server_monitor.sh &
+    ./fake_server.sh &
 
     pid=$!
 
@@ -56,7 +56,7 @@ echo
 
 while true
 do
-    ./ssh_breach_detector.sh &
+    ./fake_detector.sh &
 
     pid=$!
 
@@ -73,7 +73,7 @@ clear
 echo "[4/5] Starting Disk Repair Tool..."
 sleep 2
 
-./disk_repair.sh
+./fake_disk.sh
 
 echo
 echo "Press ENTER to continue..."
@@ -85,7 +85,7 @@ clear
 echo "[5/5] Starting AI Terminal Assistant..."
 sleep 2
 
-./ai_terminal.sh
+./fake_ai.sh
 
 # ---------------- FINISH ----------------
 
