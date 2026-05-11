@@ -11,64 +11,83 @@ sleep 2
 
 # ---------------- INSTALLER ----------------
 
+clear
 echo "[1/5] Starting Package Installer..."
 sleep 2
 
-./fake_installer.sh
+./installer.sh
 
 echo
 echo "Press ENTER to continue..."
 read
 
-clear
-
 # ---------------- SERVER MONITOR ----------------
 
+clear
 echo "[2/5] Starting Server Monitor..."
 sleep 2
 
 echo
-echo "Press CTRL + C when finished viewing."
+echo "Press ENTER at any time to continue..."
 echo
-sleep 2
 
-./fake_server.sh
+while true
+do
+    ./server_monitor.sh &
+
+    pid=$!
+
+    read -n 1 key
+
+    kill $pid 2>/dev/null
+
+    break
+done
+
+# ---------------- SSH BREACH DETECTOR ----------------
 
 clear
-
-# ---------------- SSH BREACH ----------------
-
 echo "[3/5] Starting SSH Breach Detector..."
 sleep 2
 
 echo
-echo "Press CTRL + C when finished viewing."
+echo "Press ENTER at any time to continue..."
 echo
-sleep 2
 
-./fake_detector.sh
+while true
+do
+    ./ssh_breach_detector.sh &
 
-clear
+    pid=$!
+
+    read -n 1 key
+
+    kill $pid 2>/dev/null
+
+    break
+done
 
 # ---------------- DISK REPAIR ----------------
 
+clear
 echo "[4/5] Starting Disk Repair Tool..."
 sleep 2
 
-./fake_disk.sh
+./disk_repair.sh
 
 echo
 echo "Press ENTER to continue..."
 read
 
-clear
-
 # ---------------- AI TERMINAL ----------------
 
+clear
 echo "[5/5] Starting AI Terminal Assistant..."
 sleep 2
 
-./fake_ai.sh
+./ai_terminal.sh
+
+# ---------------- FINISH ----------------
 
 clear
 
@@ -76,3 +95,5 @@ echo "========================================="
 echo "     All simulations completed."
 echo "========================================="
 echo
+
+sleep 2
